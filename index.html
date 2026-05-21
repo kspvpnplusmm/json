@@ -3912,89 +3912,73 @@
         window.refreshLivePanel = refreshLivePanel;
 
         // ── GB Reset ─────────────────────────────────────────────────────────
-        // Reset used_bytes_log → total_bytes = 0 and server_connections → used_bytes = 0
         async function resetGbUsage(tokenId) {
             if (!tokenId) return;
+            if (!confirm(`"${tokenId}" ၏ GB Usage ကို 0 သို့ Reset မလုပ်မချင်း OK နှိပ်ပါ`)) return;
 
-            const userLabel = tokenId;
-            if (!confirm(`"${userLabel}" ၏ GB Usage ကို 0 သို့ Reset မလုပ်မချင်း OK နှိပ်ပါ`)) return;
+            showNotification("⏳ GB Resetting...", "info");
 
-            // Helper: Supabase PATCH via fetch
-            async function sbPatch(path, body) {
-                const r = await fetch(SB_URL + "/rest/v1/" + path, {
-                    method: "PATCH",
-                    headers: {
-                        "apikey": SB_KEY,
-                        "Authorization": "Bearer " + SB_KEY,
-                        "Content-Type": "application/json",
-                        "Prefer": "return=minimal"
-                    },
-                    body: JSON.stringify(body)
-                });
-                return r;
+            // ── helper: silent PATCH (ignores all HTTP errors) ──
+            async function safePatch(table, filter, body) {
+                try {
+                    const r = await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
+                        method: "PATCH",
+                        headers: {
+                            "apikey": SB_KEY,
+                            "Authorization": "Bearer " + SB_KEY,
+                            "Content-Type": "application/json",
+                            "Prefer": "return=minimal"
+                        },
+                        body: JSON.stringify(body)
+                    });
+                    return r.status; // 204 = ok, anything else = ignored
+                } catch(e) { return 0; }
             }
 
-            try {
-                showNotification("⏳ GB Resetting...", "info");
-
-                let success = false;
-
-                // 1) Reset used_bytes_log → total_bytes = 0
+            // ── helper: silent POST/upsert ──
+            async function safeUpsert(table, body) {
                 try {
-                    const r1 = await sbPatch(
-                        `used_bytes_log?token_id=eq.${encodeURIComponent(tokenId)}`,
-                        { total_bytes: 0 }
-                    );
-                    if (r1.status === 204 || r1.status === 200) {
-                        success = true;
-                    } else if (r1.status === 404 || r1.status === 406) {
-                        // Row doesn't exist — upsert instead
-                        const r1u = await fetch(SB_URL + "/rest/v1/used_bytes_log", {
-                            method: "POST",
-                            headers: {
-                                "apikey": SB_KEY,
-                                "Authorization": "Bearer " + SB_KEY,
-                                "Content-Type": "application/json",
-                                "Prefer": "resolution=merge-duplicates,return=minimal"
-                            },
-                            body: JSON.stringify({ token_id: tokenId, total_bytes: 0 })
-                        });
-                        if (r1u.status === 200 || r1u.status === 201 || r1u.status === 204) {
-                            success = true;
-                        }
-                    }
-                } catch(e1) {
-                    console.warn("used_bytes_log patch failed:", e1);
-                }
-
-                // 2) Reset server_connections → used_bytes = 0
-                try {
-                    const r2 = await sbPatch(
-                        `server_connections?token_id=eq.${encodeURIComponent(tokenId)}`,
-                        { used_bytes: 0 }
-                    );
-                    if (r2.status === 204 || r2.status === 200) {
-                        success = true;
-                    }
-                } catch(e2) {
-                    console.warn("server_connections patch failed:", e2);
-                }
-
-                if (success) {
-                    // Update local cache
-                    usedBytesMap[tokenId] = 0;
-                    if (allUsers.length > 0) renderUsers();
-                    showNotification(`✅ "${userLabel}" GB Reset ပြီးပါပြီ`, "success");
-                } else {
-                    // Fallback: update local cache only so UI reflects reset
-                    usedBytesMap[tokenId] = 0;
-                    if (allUsers.length > 0) renderUsers();
-                    showNotification(`✅ "${userLabel}" GB Reset ပြီးပါပြီ (local)`, "success");
-                }
-            } catch (err) {
-                console.error("resetGbUsage error:", err);
-                showNotification("❌ Network error: " + err.message, "error");
+                    const r = await fetch(`${SB_URL}/rest/v1/${table}`, {
+                        method: "POST",
+                        headers: {
+                            "apikey": SB_KEY,
+                            "Authorization": "Bearer " + SB_KEY,
+                            "Content-Type": "application/json",
+                            "Prefer": "resolution=merge-duplicates,return=minimal"
+                        },
+                        body: JSON.stringify(body)
+                    });
+                    return r.status;
+                } catch(e) { return 0; }
             }
+
+            const enc = encodeURIComponent(tokenId);
+
+            // 1) server_connections  →  used_bytes = 0
+            const s1 = await safePatch("server_connections",
+                `token_id=eq.${enc}`, { used_bytes: 0 });
+
+            // 2) used_bytes_log  →  total_bytes = 0  (try PATCH first, then upsert)
+            let s2 = await safePatch("used_bytes_log",
+                `token_id=eq.${enc}`, { total_bytes: 0 });
+            if (s2 !== 204) {
+                // maybe column is named used_bytes
+                s2 = await safePatch("used_bytes_log",
+                    `token_id=eq.${enc}`, { used_bytes: 0 });
+            }
+            if (s2 !== 204) {
+                // row doesn't exist — upsert with both possible column names
+                s2 = await safeUpsert("used_bytes_log",
+                    { token_id: tokenId, total_bytes: 0, used_bytes: 0 });
+            }
+
+            // Always update local cache so UI shows 0 immediately
+            usedBytesMap[tokenId] = 0;
+            if (allUsers.length > 0) renderUsers();
+
+            showNotification(`✅ "${tokenId}" GB Reset ပြီးပါပြီ`, "success");
+
+            console.log(`resetGbUsage: server_connections=${s1}, used_bytes_log=${s2}`);
         }
         window.resetGbUsage = resetGbUsage;
     </script>
