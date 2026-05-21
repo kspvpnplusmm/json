@@ -366,8 +366,8 @@
 
         .total-stat .stat-value-small { color: #fff; }
         .active-stat .stat-value-small { color: #4ade80; }
-        .inactive-stat .stat-value-small { color: #fbbf24; }
-        .offline-stat .stat-value-small { color: #f87171; }
+        .inactive-stat .stat-value-small { color: #f87171; }
+        .offline-stat .stat-value-small { color: #fbbf24; }
         .revenue-stat .stat-value-small { color: #fde68a; font-size: 16px; }
 
         .stat-icon {
@@ -2432,21 +2432,21 @@
                             <i class="fas fa-circle stat-icon"></i>
                             <span id="activeUsers">3</span>
                         </div>
-                        <div class="stat-label-small">Active</div>
+                        <div class="stat-label-small">Online</div>
                     </div>
                     <div class="stat-item inactive-stat">
                         <div class="stat-value-small">
                             <i class="fas fa-circle stat-icon"></i>
                             <span id="inactiveUsers">0</span>
                         </div>
-                        <div class="stat-label-small">Inactive</div>
+                        <div class="stat-label-small">Offline</div>
                     </div>
                     <div class="stat-item offline-stat">
                         <div class="stat-value-small">
                             <i class="fas fa-circle stat-icon"></i>
                             <span id="offlineUsers">1</span>
                         </div>
-                        <div class="stat-label-small">Offline</div>
+                        <div class="stat-label-small">Expired</div>
                     </div>
                     <div class="stat-item online-stat" onclick="openLivePanel()" title="View Live Connections">
                         <div class="stat-value-small">
@@ -2916,7 +2916,7 @@
         // Initialize the app
         function initApp() {
             // Set initial demo stats
-            updateCounters(4, 3, 0, 1);
+            updateCounters(4, 0, 4, 0);
             renderDemoUsers();
             updateTotalRevenue(demoUsers);
             
@@ -2979,7 +2979,7 @@
 
         // Recalculate counters using Supabase is_online, then re-render
         function recalcCountersAndRender() {
-            let onlineCount = 0, activeCount = 0, inactiveCount = 0, expiredCount = 0;
+            let onlineCount = 0, offlineCount = 0, expiredCount = 0;
             allUsers.forEach(user => {
                 const isExpired = user.expiryDate ? isDateExpired(user.expiryDate) : true;
                 if (isExpired) {
@@ -2987,15 +2987,11 @@
                 } else {
                     const liveConn = liveConns.find(c => c.token_id === user.token);
                     if (liveConn && liveConn.is_online === true) {
-                        // VPN ချိတ်ထား → Online (active ကိုပါ ရေတွက်)
+                        // VPN ချိတ်ထား → Online
                         onlineCount++;
-                        activeCount++;
-                    } else if (liveConn && liveConn.is_online === false) {
-                        // Supabase record ရှိ + VPN မချိတ်ထား → Offline
-                        inactiveCount++;
                     } else {
-                        // Supabase record မရှိသေး → Active (ဘယ်တော့မှ ချိတ်မဖူးသေး)
-                        activeCount++;
+                        // VPN မချိတ်ထား (record ရှိသော်လည်းကောင်း မရှိသော်လည်းကောင်း) → Offline
+                        offlineCount++;
                     }
                 }
             });
@@ -3004,9 +3000,9 @@
             const tabVipBadge = document.getElementById("tabVipCount");
             if (tabVipBadge) tabVipBadge.textContent = allUsers.length || demoUsers.length;
             if (allUsers.length === 0) {
-                updateCounters(4, 3, 0, 1); renderDemoUsers(); updateTotalRevenue(demoUsers);
+                updateCounters(4, 0, 4, 0); renderDemoUsers(); updateTotalRevenue(demoUsers);
             } else {
-                updateCounters(allUsers.length, activeCount, inactiveCount, expiredCount);
+                updateCounters(allUsers.length, onlineCount, offlineCount, expiredCount);
                 filteredUsers = [...allUsers]; renderUsers(); updateTotalRevenue(allUsers);
             }
         }
@@ -3026,7 +3022,7 @@
             }, (error) => {
                 console.error("Error loading users:", error);
                 // On error, show demo data
-                updateCounters(4, 3, 0, 1);
+                updateCounters(4, 0, 4, 0);
                 renderDemoUsers();
                 updateTotalRevenue(demoUsers);
                 showNotification("⚠️ Using demo data", "info");
@@ -3136,8 +3132,7 @@
 
         // Get user status with display text
         // Online  = Supabase server_connections.is_online === true  (VPN ချိတ်ထားသည်)
-        // Offline = Supabase record ရှိပြီး is_online === false       (VPN ဖြုတ်ထားသည်)
-        // Active  = Supabase record မရှိသေး (ဘယ်တော့မှ ချိတ်မဖူးသေး သို့မဟုတ် load မရသေး)
+        // Offline = VPN မချိတ်ထား (Supabase record ရှိသော်လည်းကောင်း မရှိသော်လည်းကောင်း)
         // Expired = expiry date ကျော်ပြီ
         function getUserStatus(user) {
             const isExpired = user.expiryDate ? isDateExpired(user.expiryDate) : true;
@@ -3162,21 +3157,13 @@
                     statusBadgeClass: "status-active-small",
                     statusTextClass: "status-text-online"
                 };
-            } else if (liveConn && liveConn.is_online === false) {
-                // Supabase record ရှိသော်လည်း VPN မချိတ်ထား → Offline
+            } else {
+                // VPN မချိတ်ထား (record ရှိသော်လည်းကောင်း မရှိသော်လည်းကောင်း) → Offline
                 return { 
                     statusClass: "inactive", 
                     statusText: "Offline",
                     statusBadgeClass: "status-offline-small",
                     statusTextClass: "status-text-offline"
-                };
-            } else {
-                // Supabase record မရှိသေး (ဘယ်တော့မှ ချိတ်မဖူးသေး) → Active
-                return { 
-                    statusClass: "active", 
-                    statusText: "Active",
-                    statusBadgeClass: "status-active-small",
-                    statusTextClass: "status-text-online"
                 };
             }
         }
