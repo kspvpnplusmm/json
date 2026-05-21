@@ -2982,13 +2982,21 @@
             let onlineCount = 0, activeCount = 0, inactiveCount = 0, expiredCount = 0;
             allUsers.forEach(user => {
                 const isExpired = user.expiryDate ? isDateExpired(user.expiryDate) : true;
-                if (isExpired) { expiredCount++; }
-                else {
+                if (isExpired) {
+                    expiredCount++;
+                } else {
                     const liveConn = liveConns.find(c => c.token_id === user.token);
-                    const isOnline = liveConn && liveConn.is_online === true;
-                    if (isOnline) { onlineCount++; activeCount++; }
-                    else if (user.isActive !== false) { activeCount++; }
-                    else { inactiveCount++; }
+                    if (liveConn && liveConn.is_online === true) {
+                        // VPN ချိတ်ထား → Online (active ကိုပါ ရေတွက်)
+                        onlineCount++;
+                        activeCount++;
+                    } else if (liveConn && liveConn.is_online === false) {
+                        // Supabase record ရှိ + VPN မချိတ်ထား → Offline
+                        inactiveCount++;
+                    } else {
+                        // Supabase record မရှိသေး → Active (ဘယ်တော့မှ ချိတ်မဖူးသေး)
+                        activeCount++;
+                    }
                 }
             });
             const onlineEl = document.getElementById("onlineConnCount");
@@ -3127,9 +3135,10 @@
         }
 
         // Get user status with display text
-        // Online = Supabase server_connections.is_online is true (token actively connected)
-        // Offline = token exists in Supabase but is_online is false
-        // Expired = expiry date passed
+        // Online  = Supabase server_connections.is_online === true  (VPN ချိတ်ထားသည်)
+        // Offline = Supabase record ရှိပြီး is_online === false       (VPN ဖြုတ်ထားသည်)
+        // Active  = Supabase record မရှိသေး (ဘယ်တော့မှ ချိတ်မဖူးသေး သို့မဟုတ် load မရသေး)
+        // Expired = expiry date ကျော်ပြီ
         function getUserStatus(user) {
             const isExpired = user.expiryDate ? isDateExpired(user.expiryDate) : true;
             
@@ -3144,21 +3153,30 @@
 
             // Check Supabase live connection status by token_id
             const liveConn = liveConns.find(c => c.token_id === user.token);
-            const isOnline = liveConn ? liveConn.is_online === true : false;
 
-            if (isOnline) {
+            if (liveConn && liveConn.is_online === true) {
+                // VPN ချိတ်ထားသည် → Online
                 return { 
                     statusClass: "active", 
                     statusText: "Online",
                     statusBadgeClass: "status-active-small",
                     statusTextClass: "status-text-online"
                 };
-            } else {
+            } else if (liveConn && liveConn.is_online === false) {
+                // Supabase record ရှိသော်လည်း VPN မချိတ်ထား → Offline
                 return { 
                     statusClass: "inactive", 
                     statusText: "Offline",
                     statusBadgeClass: "status-offline-small",
                     statusTextClass: "status-text-offline"
+                };
+            } else {
+                // Supabase record မရှိသေး (ဘယ်တော့မှ ချိတ်မဖူးသေး) → Active
+                return { 
+                    statusClass: "active", 
+                    statusText: "Active",
+                    statusBadgeClass: "status-active-small",
+                    statusTextClass: "status-text-online"
                 };
             }
         }
