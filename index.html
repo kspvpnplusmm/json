@@ -2803,9 +2803,10 @@
         let allUsers = [];
         let filteredUsers = [];
         let currentEditToken = null;
-        let usedBytesMap   = {};   // token_id -> total_bytes (from used_bytes_log)
-        let liveConns      = [];   // server_connections rows
-        let liveRefreshing = false;
+        let usedBytesMap      = {};   // token_id -> total_bytes (from used_bytes_log)
+        let liveConns         = [];   // server_connections rows (has live used_bytes updated every 60s)
+        let serverDataUsage   = [];   // server_data_usage rows  (per-token, per-server breakdown)
+        let liveRefreshing    = false;
         let currentTab     = 'vip';
 
         // DOM Elements
@@ -3511,10 +3512,22 @@
             if (icon) icon.style.animation = 'spin 1s linear infinite';
 
             try {
-                const rows = await sbFetch(
-                    "server_connections?select=*&order=is_online.desc,connected_at.desc&limit=200"
-                );
-                liveConns = rows;
+                // Fetch live connections + per-server breakdown in parallel
+                const [connRows, sduRows] = await Promise.all([
+                    sbFetch("server_connections?select=*&order=is_online.desc,connected_at.desc&limit=500"),
+                    sbFetch("server_data_usage?select=*&order=token_id.asc&limit=1000").catch(() => [])
+                ]);
+                liveConns       = connRows;
+                serverDataUsage = sduRows || [];
+
+                // Sync live used_bytes into usedBytesMap (prefer live value if online & larger)
+                liveConns.forEach(c => {
+                    if (c.is_online && c.used_bytes > 0) {
+                        const existing = usedBytesMap[c.token_id] || 0;
+                        if (c.used_bytes > existing) usedBytesMap[c.token_id] = c.used_bytes;
+                    }
+                });
+
                 renderLiveConnections();
             } catch (e) {
                 console.warn("liveConns fetch error", e);
@@ -3524,6 +3537,12 @@
                 liveRefreshing = false;
                 if (icon) icon.style.animation = '';
             }
+        }
+
+        /** Get per-server breakdown rows for a given token_id */
+        function getServerBreakdown(tokenId) {
+            return serverDataUsage.filter(r => r.token_id === tokenId && r.total_bytes > 0)
+                .sort((a, b) => b.total_bytes - a.total_bytes);
         }
 
         function fmtBytes(bytes) {
@@ -3546,14 +3565,14 @@
 
         function renderLiveConnections() {
             const list = document.getElementById('liveConnList');
-            const onlineCntEl = document.getElementById('liveOnlineCount');
+            const onlineCntEl  = document.getElementById('liveOnlineCount');
             const tabLiveBadge = document.getElementById('tabLiveCount');
             const headerBadge  = document.getElementById('onlineConnCount');
 
             const onlineCount = liveConns.filter(c => c.is_online).length;
-            if (onlineCntEl) onlineCntEl.textContent = onlineCount + ' Online';
+            if (onlineCntEl)  onlineCntEl.textContent  = onlineCount + ' Online';
             if (tabLiveBadge) tabLiveBadge.textContent = liveConns.length;
-            if (headerBadge) headerBadge.textContent = onlineCount;
+            if (headerBadge)  headerBadge.textContent  = onlineCount;
 
             if (!liveConns.length) {
                 list.innerHTML = `<div class="live-no-data"><i class="fas fa-satellite-dish"></i><p>No connection data yet</p></div>`;
@@ -3561,28 +3580,60 @@
             }
 
             list.innerHTML = liveConns.map(c => {
-                const cls = c.is_online ? 'online' : 'offline';
-                const statusLabel = c.is_online ? 'Online' : 'Offline';
-                const usedB = c.used_bytes || 0;
-                // Find gb_limit from firebase allUsers
-                const fbUser = allUsers.find(u => u.token === c.token_id);
-                const limitGb = fbUser && fbUser.gb_limit > 0 ? fbUser.gb_limit : 0;
-                const limitBytes = limitGb * 1073741824;
-                const pct = limitBytes > 0 ? Math.min(Math.round(usedB / limitBytes * 100), 100) : 0;
-                const gbPctColor = pct > 80 ? '#ef4444' : pct > 50 ? '#f59e0b' : '#667eea';
+                const cls         = c.is_online ? 'online' : 'offline';
+                const statusLabel = c.is_online ? '🟢 Online' : '⚪ Offline';
+                const statusTag   = c.is_online ? 'online' : 'offline';
+
+                // ── GB accounting ──────────────────────────────────────────────
+                // server_connections.used_bytes is now updated every 60s while online
+                // used_bytes_log.total_bytes is the last-disconnect value
+                // We take the larger of the two (live always ≥ last disconnect)
+                const liveBytes     = c.used_bytes || 0;
+                const logBytes      = usedBytesMap[c.token_id] || 0;
+                const usedB         = Math.max(liveBytes, logBytes);
+
+                // gb_limit: prefer value stored in server_connections (written by app),
+                // fall back to Firebase allUsers lookup
+                const fbUser  = allUsers.find(u => u.token === c.token_id);
+                const limitGb = (c.gb_limit_gb > 0) ? c.gb_limit_gb
+                              : (fbUser && fbUser.gb_limit > 0) ? fbUser.gb_limit : 0;
+                const limitBytes   = limitGb * 1073741824;
+                const pct          = limitBytes > 0 ? Math.min(Math.round(usedB / limitBytes * 100), 100) : 0;
+                const gbPctColor   = pct > 80 ? '#ef4444' : pct > 50 ? '#f59e0b' : '#22c55e';
+                const gbLabel      = limitGb > 0
+                    ? `${fmtBytes(usedB)} / ${limitGb} GB  (${pct}%)`
+                    : `${fmtBytes(usedB)} / Unlimited`;
+
+                // ── Per-server breakdown ───────────────────────────────────────
+                const breakdown = getServerBreakdown(c.token_id);
+                const breakdownHtml = breakdown.length > 1 ? `
+                <div style="grid-column:1/-1;margin-top:6px;background:rgba(0,0,0,0.06);border-radius:8px;padding:6px 8px;">
+                    <div style="font-size:9px;font-weight:700;color:#94a3b8;letter-spacing:.5px;margin-bottom:4px;">📊 PER SERVER BREAKDOWN</div>
+                    ${breakdown.map(row => {
+                        const sPct = limitBytes > 0 ? Math.min(Math.round(row.total_bytes / limitBytes * 100), 100) : 0;
+                        const sCol = sPct > 60 ? '#ef4444' : sPct > 30 ? '#f59e0b' : '#667eea';
+                        return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+                            <span style="font-size:10px;color:#cbd5e1;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${row.server_name}">${row.server_name || row.server_key.substring(0,8)}</span>
+                            <span style="font-size:10px;font-weight:700;color:${sCol};min-width:60px;text-align:right;">${fmtBytes(row.total_bytes)}</span>
+                        </div>`;
+                    }).join('')}
+                </div>` : '';
+
+                const liveIndicator = c.is_online
+                    ? `<span style="font-size:9px;background:#dcfce7;color:#166534;border-radius:4px;padding:1px 5px;font-weight:700;">LIVE</span>` : '';
 
                 return `
                 <div class="live-conn-item ${cls}">
                     <div class="live-conn-top">
                         <div class="live-conn-user">
-                            <div class="live-conn-dot ${cls}"></div>
+                            <div class="live-conn-dot ${statusTag}"></div>
                             <div class="live-conn-name">${c.username || c.token_id || '—'}</div>
                         </div>
-                        <span class="live-conn-status-badge ${cls}">${statusLabel}</span>
+                        <span class="live-conn-status-badge ${statusTag}">${statusLabel}</span>
                     </div>
                     <div class="live-conn-details">
                         <div class="live-conn-detail">
-                            <i class="fas fa-key"></i><span>${c.token_id ? c.token_id.substring(0,12)+'…' : '—'}</span>
+                            <i class="fas fa-key"></i><span title="${c.token_id || ''}">${c.token_id ? c.token_id.substring(0,14)+'…' : '—'}</span>
                         </div>
                         <div class="live-conn-detail">
                             <i class="fas fa-server"></i><span>${c.server_name || '—'}</span>
@@ -3593,17 +3644,22 @@
                         <div class="live-conn-detail">
                             <i class="fas fa-calendar-alt"></i><span>${c.expiry_date || '—'}</span>
                         </div>
-                        <div class="live-conn-detail live-conn-bytes">
+                        <div class="live-conn-detail live-conn-bytes" style="grid-column:1/-1;">
                             <i class="fas fa-database"></i>
-                            <span>Used: ${fmtBytes(usedB)}${limitGb > 0 ? ' / ' + limitGb + ' GB' : ''}</span>
+                            <span style="font-weight:700;">${gbLabel}</span>
+                            ${liveIndicator}
                         </div>
                         ${limitGb > 0 ? `
-                        <div style="grid-column:1/-1;margin-top:3px;">
+                        <div style="grid-column:1/-1;margin-top:2px;">
                             <div class="live-bytes-bar-wrap">
-                                <div class="live-bytes-fill" style="width:${pct}%;background:linear-gradient(90deg,${gbPctColor},${gbPctColor}cc)"></div>
+                                <div class="live-bytes-fill" style="width:${pct}%;background:linear-gradient(90deg,${gbPctColor},${gbPctColor}cc);transition:width .6s ease;"></div>
                             </div>
-                            <div style="text-align:right;font-size:9px;font-weight:700;color:${gbPctColor};margin-top:1px;">${pct}% used</div>
+                            <div style="text-align:right;font-size:9px;font-weight:700;color:${gbPctColor};margin-top:1px;">${pct}%  ${pct >= 100 ? '⛔ LIMIT REACHED' : pct >= 80 ? '⚠️ Almost full' : ''}</div>
                         </div>` : ''}
+                        ${breakdownHtml}
+                        <div style="grid-column:1/-1;text-align:right;margin-top:4px;">
+                            <button onclick="resetGbUsage('${c.token_id}')" style="font-size:10px;background:#fee2e2;color:#dc2626;border:none;border-radius:6px;padding:3px 10px;cursor:pointer;font-weight:600;">↺ Reset GB</button>
+                        </div>
                     </div>
                 </div>`;
             }).join('');
@@ -3611,14 +3667,20 @@
 
         // ── GB usage card snippet helper ──────────────────
         function buildGbSnippet(tokenId, gbLimit) {
-            const usedB = usedBytesMap[tokenId] || 0;
-            const usedGB = (usedB / 1073741824).toFixed(2);
+            // Use live bytes if connected (larger of used_bytes_log vs server_connections.used_bytes)
+            const logBytes  = usedBytesMap[tokenId] || 0;
+            const liveConn  = liveConns.find(c => c.token_id === tokenId);
+            const liveBytes = (liveConn && liveConn.is_online) ? (liveConn.used_bytes || 0) : 0;
+            const usedB     = Math.max(logBytes, liveBytes);
+            const isLive    = liveConn && liveConn.is_online && liveBytes > 0;
+            const liveTag   = isLive ? ' <span style="font-size:9px;background:#dcfce7;color:#166534;border-radius:3px;padding:0 4px;font-weight:700;">LIVE</span>' : '';
+
             if (!gbLimit || gbLimit <= 0) {
                 return `
                 <div class="gb-row">
                     <i class="fas fa-database"></i>
                     <span class="detail-label">GB Used:</span>
-                    <span class="detail-value">${fmtBytes(usedB)} / Unlimited</span>
+                    <span class="detail-value">${fmtBytes(usedB)} / Unlimited${liveTag}</span>
                 </div>`;
             }
             const limitBytes = gbLimit * 1073741824;
@@ -3628,14 +3690,14 @@
             <div class="gb-row">
                 <i class="fas fa-database"></i>
                 <span class="detail-label">GB Used:</span>
-                <span class="detail-value">${fmtBytes(usedB)} / ${gbLimit} GB</span>
+                <span class="detail-value">${fmtBytes(usedB)} / ${gbLimit} GB${liveTag}</span>
             </div>
             <div class="gb-progress-wrap" style="grid-column:1/-1">
                 <div class="gb-progress-header">
                     <span class="gb-progress-label">Data Usage</span>
-                    <span class="gb-progress-pct ${cls}">${pct}%</span>
+                    <span class="gb-progress-pct ${cls}">${pct}%${pct >= 100 ? ' ⛔' : ''}</span>
                 </div>
-                <div class="gb-bar"><div class="gb-fill ${cls}" style="width:${pct}%"></div></div>
+                <div class="gb-bar"><div class="gb-fill ${cls}" style="width:${pct}%;transition:width .6s ease;"></div></div>
             </div>`;
         }
 
@@ -3859,11 +3921,20 @@
             const icon = document.getElementById('livePanelRefreshIcon');
             if (icon) icon.style.animation = 'spin 1s linear infinite';
             try {
-                const rows = await sbFetch(
-                    "server_connections?select=*&order=is_online.desc,connected_at.desc&limit=500"
-                );
-                liveConns = rows;
-                renderLiveConnections(); // keep existing tab render in sync
+                const [rows, sduRows] = await Promise.all([
+                    sbFetch("server_connections?select=*&order=is_online.desc,connected_at.desc&limit=500"),
+                    sbFetch("server_data_usage?select=*&order=token_id.asc&limit=1000").catch(() => [])
+                ]);
+                liveConns       = rows;
+                serverDataUsage = sduRows || [];
+                // Sync live bytes into usedBytesMap
+                liveConns.forEach(c => {
+                    if (c.is_online && c.used_bytes > 0) {
+                        const ex = usedBytesMap[c.token_id] || 0;
+                        if (c.used_bytes > ex) usedBytesMap[c.token_id] = c.used_bytes;
+                    }
+                });
+                renderLiveConnections();
                 renderLivePanelRows();
             } catch(e) {
                 document.getElementById('livePanelList').innerHTML =
@@ -3889,17 +3960,26 @@
             list.innerHTML = liveConns.map(c => {
                 const cls        = c.is_online ? 'online' : 'offline';
                 const rowCls     = c.is_online ? 'row-online' : 'row-offline';
-                const statusText = c.is_online ? 'Online' : 'Offline';
-                // Truncate token_id to 12 chars
+                const statusText = c.is_online ? '🟢 Online' : '⚪ Offline';
                 const tokenShort = c.token_id ? c.token_id.substring(0, 14) : '—';
                 const server     = c.server_name || '—';
                 const username   = c.username    || c.token_id || '—';
+
+                // GB info for panel row
+                const liveBytes = Math.max(c.used_bytes || 0, usedBytesMap[c.token_id] || 0);
+                const fbUser    = allUsers.find(u => u.token === c.token_id);
+                const limitGb   = (c.gb_limit_gb > 0) ? c.gb_limit_gb
+                                : (fbUser && fbUser.gb_limit > 0) ? fbUser.gb_limit : 0;
+                const gbStr     = limitGb > 0
+                    ? `${fmtBytes(liveBytes)} / ${limitGb}GB`
+                    : fmtBytes(liveBytes);
 
                 return `
                 <div class="live-panel-row ${rowCls}">
                     <div class="live-panel-cell cell-server" title="${server}">${server}</div>
                     <div class="live-panel-cell cell-user"   title="${username}">${username}</div>
                     <div class="live-panel-cell cell-token"  title="${c.token_id || ''}">${tokenShort}</div>
+                    <div class="live-panel-cell" style="font-size:10px;font-weight:700;color:${c.is_online?'#22c55e':'#94a3b8'};" title="${gbStr}">${gbStr}</div>
                     <div class="live-panel-status">
                         <div class="live-panel-status-dot ${cls}"></div>
                         <span class="live-panel-status-text ${cls}">${statusText}</span>
@@ -3958,27 +4038,37 @@
             const s1 = await safePatch("server_connections",
                 `token_id=eq.${enc}`, { used_bytes: 0 });
 
-            // 2) used_bytes_log  →  total_bytes = 0  (try PATCH first, then upsert)
+            // 2) used_bytes_log  →  total_bytes = 0
             let s2 = await safePatch("used_bytes_log",
                 `token_id=eq.${enc}`, { total_bytes: 0 });
             if (s2 !== 204) {
-                // maybe column is named used_bytes
-                s2 = await safePatch("used_bytes_log",
-                    `token_id=eq.${enc}`, { used_bytes: 0 });
-            }
-            if (s2 !== 204) {
-                // row doesn't exist — upsert with both possible column names
                 s2 = await safeUpsert("used_bytes_log",
-                    { token_id: tokenId, total_bytes: 0, used_bytes: 0 });
+                    { token_id: tokenId, total_bytes: 0 });
             }
 
-            // Always update local cache so UI shows 0 immediately
+            // 3) server_data_usage  →  DELETE all rows for this token (per-server reset)
+            try {
+                await fetch(`${SB_URL}/rest/v1/server_data_usage?token_id=eq.${enc}`, {
+                    method: "DELETE",
+                    headers: {
+                        "apikey": SB_KEY,
+                        "Authorization": "Bearer " + SB_KEY,
+                        "Prefer": "return=minimal"
+                    }
+                });
+            } catch(e) { console.warn("server_data_usage delete failed", e); }
+
+            // Update local caches so UI shows 0 immediately
             usedBytesMap[tokenId] = 0;
+            serverDataUsage = serverDataUsage.filter(r => r.token_id !== tokenId);
+            const liveConn = liveConns.find(c => c.token_id === tokenId);
+            if (liveConn) liveConn.used_bytes = 0;
+
             if (allUsers.length > 0) renderUsers();
+            renderLiveConnections();
 
-            showNotification(`✅ "${tokenId}" GB Reset ပြီးပါပြီ`, "success");
-
-            console.log(`resetGbUsage: server_connections=${s1}, used_bytes_log=${s2}`);
+            showNotification(`✅ "${tokenId.substring(0,10)}…" GB Reset ပြီးပါပြီ`, "success");
+            console.log(`resetGbUsage: sc=${s1}, log=${s2}, sdu=deleted`);
         }
         window.resetGbUsage = resetGbUsage;
     </script>
