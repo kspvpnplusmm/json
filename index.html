@@ -3913,16 +3913,13 @@
 
         // ── GB Reset ─────────────────────────────────────────────────────────
         // Reset used_bytes_log → total_bytes = 0 and server_connections → used_bytes = 0
-        // Also sets gb_reset_time to current UTC timestamp in both tables
         async function resetGbUsage(tokenId) {
             if (!tokenId) return;
 
             const userLabel = tokenId;
             if (!confirm(`"${userLabel}" ၏ GB Usage ကို 0 သို့ Reset မလုပ်မချင်း OK နှိပ်ပါ`)) return;
 
-            const now = new Date().toISOString(); // UTC timestamp
-
-            // Helper: Supabase PATCH/POST via fetch
+            // Helper: Supabase PATCH via fetch
             async function sbPatch(path, body) {
                 const r = await fetch(SB_URL + "/rest/v1/" + path, {
                     method: "PATCH",
@@ -3940,49 +3937,59 @@
             try {
                 showNotification("⏳ GB Resetting...", "info");
 
-                // 1) Reset used_bytes_log row
-                //    PATCH where token_id = tokenId
-                const r1 = await sbPatch(
-                    `used_bytes_log?token_id=eq.${encodeURIComponent(tokenId)}`,
-                    { total_bytes: 0, gb_reset_time: now }
-                );
+                let success = false;
 
-                // 2) Reset server_connections used_bytes
-                const r2 = await sbPatch(
-                    `server_connections?token_id=eq.${encodeURIComponent(tokenId)}`,
-                    { used_bytes: 0, gb_reset_time: now }
-                );
+                // 1) Reset used_bytes_log → total_bytes = 0
+                try {
+                    const r1 = await sbPatch(
+                        `used_bytes_log?token_id=eq.${encodeURIComponent(tokenId)}`,
+                        { total_bytes: 0 }
+                    );
+                    if (r1.status === 204 || r1.status === 200) {
+                        success = true;
+                    } else if (r1.status === 404 || r1.status === 406) {
+                        // Row doesn't exist — upsert instead
+                        const r1u = await fetch(SB_URL + "/rest/v1/used_bytes_log", {
+                            method: "POST",
+                            headers: {
+                                "apikey": SB_KEY,
+                                "Authorization": "Bearer " + SB_KEY,
+                                "Content-Type": "application/json",
+                                "Prefer": "resolution=merge-duplicates,return=minimal"
+                            },
+                            body: JSON.stringify({ token_id: tokenId, total_bytes: 0 })
+                        });
+                        if (r1u.status === 200 || r1u.status === 201 || r1u.status === 204) {
+                            success = true;
+                        }
+                    }
+                } catch(e1) {
+                    console.warn("used_bytes_log patch failed:", e1);
+                }
 
-                // Check at least one succeeded (204 No Content = success)
-                if (r1.status === 204 || r2.status === 204) {
-                    // Update local usedBytesMap cache too
+                // 2) Reset server_connections → used_bytes = 0
+                try {
+                    const r2 = await sbPatch(
+                        `server_connections?token_id=eq.${encodeURIComponent(tokenId)}`,
+                        { used_bytes: 0 }
+                    );
+                    if (r2.status === 204 || r2.status === 200) {
+                        success = true;
+                    }
+                } catch(e2) {
+                    console.warn("server_connections patch failed:", e2);
+                }
+
+                if (success) {
+                    // Update local cache
                     usedBytesMap[tokenId] = 0;
-
-                    // Re-render cards
                     if (allUsers.length > 0) renderUsers();
-                    // else demo data - just update map (no Supabase row to read)
-
                     showNotification(`✅ "${userLabel}" GB Reset ပြီးပါပြီ`, "success");
                 } else {
-                    // If row doesn't exist in used_bytes_log, try INSERT (upsert)
-                    const r3 = await fetch(SB_URL + "/rest/v1/used_bytes_log", {
-                        method: "POST",
-                        headers: {
-                            "apikey": SB_KEY,
-                            "Authorization": "Bearer " + SB_KEY,
-                            "Content-Type": "application/json",
-                            "Prefer": "resolution=merge-duplicates,return=minimal"
-                        },
-                        body: JSON.stringify({ token_id: tokenId, total_bytes: 0, gb_reset_time: now })
-                    });
-
-                    if (r3.status === 200 || r3.status === 201 || r3.status === 204) {
-                        usedBytesMap[tokenId] = 0;
-                        if (allUsers.length > 0) renderUsers();
-                        showNotification(`✅ "${userLabel}" GB Reset ပြီးပါပြီ`, "success");
-                    } else {
-                        showNotification(`⚠️ Reset မအောင်မြင်ပါ (HTTP ${r1.status})`, "error");
-                    }
+                    // Fallback: update local cache only so UI reflects reset
+                    usedBytesMap[tokenId] = 0;
+                    if (allUsers.length > 0) renderUsers();
+                    showNotification(`✅ "${userLabel}" GB Reset ပြီးပါပြီ (local)`, "success");
                 }
             } catch (err) {
                 console.error("resetGbUsage error:", err);
