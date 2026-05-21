@@ -2010,132 +2010,84 @@
         .live-conn-list::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
         .dark-mode .live-conn-list::-webkit-scrollbar-thumb { background: #475569; }
 
+        /* ── Live Connection Card ── */
         .live-conn-item {
             background: white;
-            border-radius: 12px;
-            padding: 10px 12px;
+            border-radius: 18px;
             margin-bottom: 10px;
-            border-left: 4px solid #94a3b8;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-            transition: all 0.2s;
-        }
-
-        .dark-mode .live-conn-item {
-            background: #1e2d45;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.25);
-        }
-
-        .live-conn-item.online  { border-left-color: #22c55e; }
-        .live-conn-item.offline { border-left-color: #94a3b8; }
-
-        .live-conn-top {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 5px;
-        }
-
-        .live-conn-user {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .live-conn-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-        }
-
-        .live-conn-dot.online  { background: #22c55e; box-shadow: 0 0 5px #22c55e; animation: pulse-green 1.5s infinite; }
-        .live-conn-dot.offline { background: #94a3b8; }
-
-        .live-conn-name {
-            font-weight: 700;
-            font-size: 12px;
-            color: #1e293b;
-        }
-
-        .dark-mode .live-conn-name { color: #e2e8f0; }
-
-        .live-conn-status-badge {
-            font-size: 9px;
-            font-weight: 700;
-            padding: 2px 7px;
-            border-radius: 10px;
-        }
-
-        .live-conn-status-badge.online  { background: #dcfce7; color: #16a34a; }
-        .live-conn-status-badge.offline { background: #f1f5f9; color: #64748b; }
-        .dark-mode .live-conn-status-badge.online  { background: #14532d; color: #86efac; }
-        .dark-mode .live-conn-status-badge.offline { background: #1e2d45; color: #94a3b8; border: 1px solid #334155; }
-
-        .live-conn-details {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 3px 8px;
-            font-size: 10px;
-        }
-
-        .live-conn-detail {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            color: #64748b;
-        }
-
-        .dark-mode .live-conn-detail { color: #94a3b8; }
-
-        .live-conn-detail i {
-            color: #667eea;
-            font-size: 10px;
-            width: 11px;
-            text-align: center;
-        }
-
-        .dark-mode .live-conn-detail i { color: #818cf8; }
-
-        .live-conn-detail span { font-weight: 600; color: #1e293b; }
-        .dark-mode .live-conn-detail span { color: #e2e8f0; }
-
-        .live-conn-bytes {
-            grid-column: 1 / -1;
-            margin-top: 4px;
-        }
-
-        .live-bytes-bar-wrap {
-            background: #e2e8f0;
-            border-radius: 3px;
-            height: 4px;
+            border: 1.5px solid #e2e8f0;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
             overflow: hidden;
-            margin-top: 3px;
+            transition: transform .15s, box-shadow .15s;
         }
+        .live-conn-item:active { transform: scale(0.98); }
+        .live-conn-item.online  { border-color: rgba(34,197,94,0.35); box-shadow: 0 4px 20px rgba(34,197,94,0.12); }
+        .live-conn-item.offline { border-color: #e2e8f0; }
+        .dark-mode .live-conn-item         { background: #1a2744; border-color: #2a3a5c; box-shadow: 0 2px 12px rgba(0,0,0,0.3); }
+        .dark-mode .live-conn-item.online  { border-color: rgba(34,197,94,0.3); box-shadow: 0 4px 20px rgba(34,197,94,0.15); }
+        .dark-mode .live-conn-item.offline { border-color: #2a3a5c; }
 
-        .dark-mode .live-bytes-bar-wrap { background: #334155; }
+        /* gradient bar */
+        .lc-bar { height: 3px; width: 100%; }
+        .live-conn-item.online  .lc-bar { background: linear-gradient(90deg,#22c55e,#4ade80,#86efac); }
+        .live-conn-item.offline .lc-bar { background: linear-gradient(90deg,#94a3b8,#cbd5e1); }
 
-        .live-bytes-fill {
-            height: 100%;
-            border-radius: 3px;
-            background: linear-gradient(90deg, #667eea, #764ba2);
-        }
+        /* body */
+        .lc-body { padding: 11px 14px 13px; }
 
-        .live-no-data {
-            text-align: center;
-            padding: 40px 20px;
-            color: #94a3b8;
-        }
+        /* Row 1: dot + name + badge */
+        .lc-row1 { display:flex; align-items:center; gap:8px; margin-bottom:9px; }
+        .live-conn-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+        .live-conn-dot.online  { background:#22c55e; box-shadow:0 0 7px #22c55e99; animation:pulse-green 1.5s infinite; }
+        .live-conn-dot.offline { background:#94a3b8; }
+        .live-conn-name { font-weight:800; font-size:13px; color:#0f172a; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .dark-mode .live-conn-name { color:#f1f5f9; }
+        .live-conn-status-badge { font-size:9px; font-weight:800; padding:3px 10px; border-radius:20px; flex-shrink:0; letter-spacing:.3px; }
+        .live-conn-status-badge.online  { background:linear-gradient(135deg,#22c55e,#16a34a); color:#fff; }
+        .live-conn-status-badge.offline { background:#f1f5f9; color:#64748b; }
+        .dark-mode .live-conn-status-badge.offline { background:#2a3a5c; color:#94a3b8; }
 
-        .dark-mode .live-no-data { color: #64748b; }
+        /* Row 2: chips */
+        .lc-chips { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:9px; }
+        .lc-chip  { display:flex; align-items:center; gap:4px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:3px 9px; font-size:10px; font-weight:600; color:#334155; white-space:nowrap; }
+        .dark-mode .lc-chip { background:#0f1e35; border-color:#2a3a5c; color:#cbd5e1; }
+        .lc-chip i { color:#667eea; font-size:9px; }
+        .dark-mode .lc-chip i { color:#818cf8; }
 
-        .live-no-data i { font-size: 36px; margin-bottom: 10px; opacity: 0.5; }
+        /* Row 3: GB bar */
+        .lc-gb-row { display:flex; align-items:center; gap:7px; font-size:10px; }
+        .lc-gb-label { font-weight:700; color:#64748b; flex-shrink:0; }
+        .dark-mode .lc-gb-label { color:#94a3b8; }
+        .lc-gb-val   { font-weight:800; color:#0f172a; flex-shrink:0; }
+        .dark-mode .lc-gb-val { color:#f1f5f9; }
+        .live-bytes-bar-wrap { flex:1; background:#e2e8f0; border-radius:4px; height:5px; overflow:hidden; }
+        .dark-mode .live-bytes-bar-wrap { background:#2a3a5c; }
+        .live-bytes-fill { height:100%; border-radius:4px; transition:width .6s ease; }
+        .lc-pct { font-size:10px; font-weight:800; flex-shrink:0; min-width:30px; text-align:right; }
 
-        .live-loading {
-            text-align: center;
-            padding: 30px;
-            color: #94a3b8;
-        }
+        /* breakdown */
+        .lc-breakdown { margin-top:9px; background:rgba(102,126,234,0.07); border-radius:10px; padding:7px 10px; }
+        .dark-mode .lc-breakdown { background:rgba(102,126,234,0.12); }
+        .lc-bk-title { font-size:9px; font-weight:800; color:#94a3b8; letter-spacing:.5px; margin-bottom:5px; }
+        .lc-bk-row   { display:flex; align-items:center; gap:6px; margin-bottom:3px; }
+        .lc-bk-name  { font-size:10px; color:#64748b; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .dark-mode .lc-bk-name { color:#94a3b8; }
+        .lc-bk-val   { font-size:10px; font-weight:700; min-width:55px; text-align:right; }
 
-        .online-stat .stat-value-small { color: #34d399; }
+        /* footer */
+        .lc-footer { display:flex; justify-content:flex-end; margin-top:9px; }
+        .lc-reset-btn { font-size:10px; font-weight:700; background:#fee2e2; color:#dc2626; border:none; border-radius:8px; padding:4px 13px; cursor:pointer; transition:opacity .15s; }
+        .lc-reset-btn:hover { opacity:.8; }
+        .dark-mode .lc-reset-btn { background:#3b1414; color:#f87171; }
+
+        /* hide old classes */
+        .live-conn-top, .live-conn-details, .live-conn-bytes { display:none !important; }
+
+        .live-no-data { text-align:center; padding:40px 20px; color:#94a3b8; }
+        .dark-mode .live-no-data { color:#64748b; }
+        .live-no-data i { font-size:36px; margin-bottom:10px; opacity:.5; }
+        .live-loading { text-align:center; padding:30px; color:#94a3b8; }
+        .online-stat .stat-value-small { color:#34d399; }
 
         /* ===== FULLSCREEN LIVE PANEL OVERLAY ===== */
         .live-panel-overlay {
@@ -3025,49 +2977,44 @@
             filterUsers();
         }
 
+        // Recalculate counters using Supabase is_online, then re-render
+        function recalcCountersAndRender() {
+            let onlineCount = 0, activeCount = 0, inactiveCount = 0, expiredCount = 0;
+            allUsers.forEach(user => {
+                const isExpired = user.expiryDate ? isDateExpired(user.expiryDate) : true;
+                if (isExpired) { expiredCount++; }
+                else {
+                    const liveConn = liveConns.find(c => c.token_id === user.token);
+                    const isOnline = liveConn && liveConn.is_online === true;
+                    if (isOnline) { onlineCount++; activeCount++; }
+                    else if (user.isActive !== false) { activeCount++; }
+                    else { inactiveCount++; }
+                }
+            });
+            const onlineEl = document.getElementById("onlineConnCount");
+            if (onlineEl) onlineEl.textContent = onlineCount;
+            const tabVipBadge = document.getElementById("tabVipCount");
+            if (tabVipBadge) tabVipBadge.textContent = allUsers.length || demoUsers.length;
+            if (allUsers.length === 0) {
+                updateCounters(4, 3, 0, 1); renderDemoUsers(); updateTotalRevenue(demoUsers);
+            } else {
+                updateCounters(allUsers.length, activeCount, inactiveCount, expiredCount);
+                filteredUsers = [...allUsers]; renderUsers(); updateTotalRevenue(allUsers);
+            }
+        }
+
         // Load users from Firestore
         function loadUsers() {
             db.collection("users").onSnapshot((snapshot) => {
                 allUsers = [];
                 filteredUsers = [];
                 
-                let activeCount = 0;
-                let inactiveCount = 0;
-                let offlineCount = 0;
-                
                 snapshot.forEach(doc => {
-                    const user = {
-                        token: doc.id,
-                        ...doc.data()
-                    };
+                    const user = { token: doc.id, ...doc.data() };
                     allUsers.push(user);
-                    
-                    // Calculate user status
-                    const isExpired = user.expiryDate ? isDateExpired(user.expiryDate) : true;
-                    
-                    if (user.isActive && !isExpired) {
-                        activeCount++;
-                    } else if (!user.isActive && !isExpired) {
-                        inactiveCount++;
-                    } else {
-                        offlineCount++;
-                    }
                 });
 
-                const tabVipBadge = document.getElementById('tabVipCount');
-                if (tabVipBadge) tabVipBadge.textContent = allUsers.length || demoUsers.length;
-                
-                // If no real users, show demo
-                if (allUsers.length === 0) {
-                    updateCounters(4, 3, 0, 1);
-                    renderDemoUsers();
-                    updateTotalRevenue(demoUsers);
-                } else {
-                    updateCounters(allUsers.length, activeCount, inactiveCount, offlineCount);
-                    filteredUsers = [...allUsers];
-                    renderUsers();
-                    updateTotalRevenue(allUsers);
-                }
+                recalcCountersAndRender();
             }, (error) => {
                 console.error("Error loading users:", error);
                 // On error, show demo data
@@ -3180,6 +3127,9 @@
         }
 
         // Get user status with display text
+        // Online = Supabase server_connections.is_online is true (token actively connected)
+        // Offline = token exists in Supabase but is_online is false
+        // Expired = expiry date passed
         function getUserStatus(user) {
             const isExpired = user.expiryDate ? isDateExpired(user.expiryDate) : true;
             
@@ -3190,7 +3140,13 @@
                     statusBadgeClass: "status-expired-small",
                     statusTextClass: "status-text-expired"
                 };
-            } else if (user.isActive) {
+            }
+
+            // Check Supabase live connection status by token_id
+            const liveConn = liveConns.find(c => c.token_id === user.token);
+            const isOnline = liveConn ? liveConn.is_online === true : false;
+
+            if (isOnline) {
                 return { 
                     statusClass: "active", 
                     statusText: "Online",
@@ -3529,6 +3485,8 @@
                 });
 
                 renderLiveConnections();
+                // Re-render VIP users tab so online/offline status reflects latest Supabase data
+                if (allUsers.length > 0) recalcCountersAndRender();
             } catch (e) {
                 console.warn("liveConns fetch error", e);
                 document.getElementById('liveConnList').innerHTML =
@@ -3580,85 +3538,79 @@
             }
 
             list.innerHTML = liveConns.map(c => {
-                const cls         = c.is_online ? 'online' : 'offline';
-                const statusLabel = c.is_online ? '🟢 Online' : '⚪ Offline';
-                const statusTag   = c.is_online ? 'online' : 'offline';
+                const cls       = c.is_online ? 'online' : 'offline';
+                const statusTag = c.is_online ? 'online' : 'offline';
+                const statusLbl = c.is_online ? '🟢 Online' : '⚪ Offline';
 
-                // ── GB accounting ──────────────────────────────────────────────
-                // server_connections.used_bytes is now updated every 60s while online
-                // used_bytes_log.total_bytes is the last-disconnect value
-                // We take the larger of the two (live always ≥ last disconnect)
-                const liveBytes     = c.used_bytes || 0;
-                const logBytes      = usedBytesMap[c.token_id] || 0;
-                const usedB         = Math.max(liveBytes, logBytes);
+                const liveBytes = c.used_bytes || 0;
+                const logBytes  = usedBytesMap[c.token_id] || 0;
+                const usedB     = Math.max(liveBytes, logBytes);
 
-                // gb_limit: prefer value stored in server_connections (written by app),
-                // fall back to Firebase allUsers lookup
-                const fbUser  = allUsers.find(u => u.token === c.token_id);
-                const limitGb = (c.gb_limit_gb > 0) ? c.gb_limit_gb
-                              : (fbUser && fbUser.gb_limit > 0) ? fbUser.gb_limit : 0;
-                const limitBytes   = limitGb * 1073741824;
-                const pct          = limitBytes > 0 ? Math.min(Math.round(usedB / limitBytes * 100), 100) : 0;
-                const gbPctColor   = pct > 80 ? '#ef4444' : pct > 50 ? '#f59e0b' : '#22c55e';
-                const gbLabel      = limitGb > 0
-                    ? `${fmtBytes(usedB)} / ${limitGb} GB  (${pct}%)`
+                const fbUser    = allUsers.find(u => u.token === c.token_id);
+                const limitGb   = (c.gb_limit_gb > 0) ? c.gb_limit_gb
+                                : (fbUser && fbUser.gb_limit > 0) ? fbUser.gb_limit : 0;
+                const limitBytes  = limitGb * 1073741824;
+                const pct         = limitBytes > 0 ? Math.min(Math.round(usedB / limitBytes * 100), 100) : 0;
+                const gbColor     = pct > 80 ? '#ef4444' : pct > 50 ? '#f59e0b' : '#22c55e';
+                const gbValTxt    = limitGb > 0
+                    ? `${fmtBytes(usedB)} / ${limitGb} GB`
                     : `${fmtBytes(usedB)} / Unlimited`;
 
-                // ── Per-server breakdown ───────────────────────────────────────
                 const breakdown = getServerBreakdown(c.token_id);
                 const breakdownHtml = breakdown.length > 1 ? `
-                <div style="grid-column:1/-1;margin-top:6px;background:rgba(0,0,0,0.06);border-radius:8px;padding:6px 8px;">
-                    <div style="font-size:9px;font-weight:700;color:#94a3b8;letter-spacing:.5px;margin-bottom:4px;">📊 PER SERVER BREAKDOWN</div>
-                    ${breakdown.map(row => {
-                        const sPct = limitBytes > 0 ? Math.min(Math.round(row.total_bytes / limitBytes * 100), 100) : 0;
-                        const sCol = sPct > 60 ? '#ef4444' : sPct > 30 ? '#f59e0b' : '#667eea';
-                        return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
-                            <span style="font-size:10px;color:#cbd5e1;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${row.server_name}">${row.server_name || row.server_key.substring(0,8)}</span>
-                            <span style="font-size:10px;font-weight:700;color:${sCol};min-width:60px;text-align:right;">${fmtBytes(row.total_bytes)}</span>
-                        </div>`;
-                    }).join('')}
-                </div>` : '';
+                    <div class="lc-breakdown">
+                        <div class="lc-bk-title">📊 PER SERVER</div>
+                        ${breakdown.map(row => {
+                            const sCol = row.total_bytes/Math.max(usedB,1) > .6 ? '#ef4444'
+                                       : row.total_bytes/Math.max(usedB,1) > .3 ? '#f59e0b' : '#667eea';
+                            return `<div class="lc-bk-row">
+                                <span class="lc-bk-name" title="${row.server_name}">${row.server_name || row.server_key.substring(0,8)}</span>
+                                <span class="lc-bk-val" style="color:${sCol}">${fmtBytes(row.total_bytes)}</span>
+                            </div>`;
+                        }).join('')}
+                    </div>` : '';
 
-                const liveIndicator = c.is_online
-                    ? `<span style="font-size:9px;background:#dcfce7;color:#166534;border-radius:4px;padding:1px 5px;font-weight:700;">LIVE</span>` : '';
+                const liveTag = c.is_online
+                    ? `<span style="font-size:9px;background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;border-radius:6px;padding:2px 6px;font-weight:800;margin-left:4px;">LIVE</span>` : '';
+
+                const tokenShort = c.token_id ? c.token_id.substring(0,16)+'…' : '—';
 
                 return `
                 <div class="live-conn-item ${cls}">
-                    <div class="live-conn-top">
-                        <div class="live-conn-user">
+                    <div class="lc-bar"></div>
+                    <div class="lc-body">
+
+                        <!-- Row 1: dot · name · status -->
+                        <div class="lc-row1">
                             <div class="live-conn-dot ${statusTag}"></div>
                             <div class="live-conn-name">${c.username || c.token_id || '—'}</div>
+                            <span class="live-conn-status-badge ${statusTag}">${statusLbl}</span>
                         </div>
-                        <span class="live-conn-status-badge ${statusTag}">${statusLabel}</span>
-                    </div>
-                    <div class="live-conn-details">
-                        <div class="live-conn-detail">
-                            <i class="fas fa-key"></i><span title="${c.token_id || ''}">${c.token_id ? c.token_id.substring(0,14)+'…' : '—'}</span>
+
+                        <!-- Row 2: info chips -->
+                        <div class="lc-chips">
+                            <span class="lc-chip"><i class="fas fa-server"></i>${c.server_name || '—'}</span>
+                            <span class="lc-chip"><i class="fas fa-key"></i>${tokenShort}</span>
+                            <span class="lc-chip"><i class="fas fa-clock"></i>${fmtTime(c.connected_at)}</span>
+                            <span class="lc-chip"><i class="fas fa-calendar-alt"></i>${c.expiry_date || '—'}</span>
                         </div>
-                        <div class="live-conn-detail">
-                            <i class="fas fa-server"></i><span>${c.server_name || '—'}</span>
-                        </div>
-                        <div class="live-conn-detail">
-                            <i class="fas fa-clock"></i><span>${fmtTime(c.connected_at)}</span>
-                        </div>
-                        <div class="live-conn-detail">
-                            <i class="fas fa-calendar-alt"></i><span>${c.expiry_date || '—'}</span>
-                        </div>
-                        <div class="live-conn-detail live-conn-bytes" style="grid-column:1/-1;">
-                            <i class="fas fa-database"></i>
-                            <span style="font-weight:700;">${gbLabel}</span>
-                            ${liveIndicator}
-                        </div>
-                        ${limitGb > 0 ? `
-                        <div style="grid-column:1/-1;margin-top:2px;">
+
+                        <!-- Row 3: GB bar -->
+                        <div class="lc-gb-row">
+                            <span class="lc-gb-label"><i class="fas fa-database" style="color:#667eea;margin-right:3px;"></i>Data</span>
+                            <span class="lc-gb-val">${gbValTxt}${liveTag}</span>
+                            ${limitGb > 0 ? `
                             <div class="live-bytes-bar-wrap">
-                                <div class="live-bytes-fill" style="width:${pct}%;background:linear-gradient(90deg,${gbPctColor},${gbPctColor}cc);transition:width .6s ease;"></div>
+                                <div class="live-bytes-fill" style="width:${pct}%;background:linear-gradient(90deg,${gbColor},${gbColor}cc);"></div>
                             </div>
-                            <div style="text-align:right;font-size:9px;font-weight:700;color:${gbPctColor};margin-top:1px;">${pct}%  ${pct >= 100 ? '⛔ LIMIT REACHED' : pct >= 80 ? '⚠️ Almost full' : ''}</div>
-                        </div>` : ''}
+                            <span class="lc-pct" style="color:${gbColor}">${pct}%${pct>=100?' ⛔':pct>=80?' ⚠️':''}</span>` : ''}
+                        </div>
+
                         ${breakdownHtml}
-                        <div style="grid-column:1/-1;text-align:right;margin-top:4px;">
-                            <button onclick="resetGbUsage('${c.token_id}')" style="font-size:10px;background:#fee2e2;color:#dc2626;border:none;border-radius:6px;padding:3px 10px;cursor:pointer;font-weight:600;">↺ Reset GB</button>
+
+                        <!-- Footer -->
+                        <div class="lc-footer">
+                            <button class="lc-reset-btn" onclick="resetGbUsage('${c.token_id}')">↺ Reset GB</button>
                         </div>
                     </div>
                 </div>`;
