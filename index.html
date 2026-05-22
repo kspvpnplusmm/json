@@ -366,8 +366,8 @@
 
         .total-stat .stat-value-small { color: #fff; }
         .active-stat .stat-value-small { color: #4ade80; }
-        .inactive-stat .stat-value-small { color: #f87171; }
-        .offline-stat .stat-value-small { color: #fbbf24; }
+        .inactive-stat .stat-value-small { color: #fbbf24; }
+        .offline-stat .stat-value-small { color: #f87171; }
         .revenue-stat .stat-value-small { color: #fde68a; font-size: 16px; }
 
         .stat-icon {
@@ -2089,71 +2089,117 @@
         .live-loading { text-align:center; padding:30px; color:#94a3b8; }
         .online-stat .stat-value-small { color:#34d399; }
 
-        /* ===== FULLSCREEN LIVE PANEL OVERLAY ===== */
+        /* ===== FULLSCREEN LIVE PANEL OVERLAY — REDESIGNED ===== */
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Outfit:wght@400;600;700;800;900&display=swap');
+
         .live-panel-overlay {
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: #0f1623;
+            background: #060d18;
             z-index: 2000;
             display: none;
             flex-direction: column;
             overflow: hidden;
+            font-family: 'Outfit', sans-serif;
         }
 
         .live-panel-overlay.show {
             display: flex;
+            animation: lp-fade-in 0.3s ease;
         }
 
-        /* Panel sticky header */
+        @keyframes lp-fade-in {
+            from { opacity: 0; transform: translateY(12px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ── Ambient grid background ── */
+        .live-panel-overlay::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(34,197,94,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(34,197,94,0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ── Glow orbs ── */
+        .live-panel-overlay::after {
+            content: '';
+            position: absolute;
+            top: -80px; left: -80px;
+            width: 320px; height: 320px;
+            background: radial-gradient(circle, rgba(34,197,94,0.08) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ── Header ── */
         .live-panel-header {
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-            padding: 14px 16px 10px;
-            border-bottom: 1px solid #22c55e33;
+            position: relative;
+            z-index: 1;
+            background: linear-gradient(180deg, #0a1628 0%, rgba(6,13,24,0.95) 100%);
+            padding: 18px 18px 0;
+            border-bottom: 1px solid rgba(34,197,94,0.15);
             flex-shrink: 0;
+            backdrop-filter: blur(10px);
         }
 
         .live-panel-top-row {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 8px;
+            margin-bottom: 14px;
         }
 
         .live-panel-title {
             display: flex;
             align-items: center;
-            gap: 8px;
-            font-size: 15px;
+            gap: 10px;
+            font-size: 17px;
             font-weight: 800;
-            color: #e2e8f0;
-            letter-spacing: 0.3px;
+            color: #f0fdf4;
+            letter-spacing: -0.3px;
         }
 
         .live-panel-title .live-dot-big {
-            width: 10px;
-            height: 10px;
+            width: 11px;
+            height: 11px;
             border-radius: 50%;
             background: #22c55e;
-            box-shadow: 0 0 8px #22c55e;
+            box-shadow: 0 0 0 3px rgba(34,197,94,0.2), 0 0 12px #22c55e;
             animation: pulse-green 1.5s infinite;
+            flex-shrink: 0;
         }
 
         .live-panel-count-badge {
-            background: linear-gradient(135deg, #22c55e, #16a34a);
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
             color: white;
-            padding: 3px 12px;
-            border-radius: 20px;
+            padding: 4px 14px;
+            border-radius: 30px;
             font-size: 12px;
             font-weight: 800;
+            letter-spacing: 0.3px;
+            box-shadow: 0 0 14px rgba(34,197,94,0.4);
+        }
+
+        /* Header action buttons */
+        .lp-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .btn-live-panel-close {
-            background: #374151;
-            color: #e2e8f0;
-            border: none;
-            width: 34px;
-            height: 34px;
-            border-radius: 50%;
+            background: rgba(239,68,68,0.1);
+            color: #f87171;
+            border: 1px solid rgba(239,68,68,0.25);
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -2165,150 +2211,279 @@
         .btn-live-panel-close:hover {
             background: #ef4444;
             color: white;
+            border-color: #ef4444;
+            box-shadow: 0 0 16px rgba(239,68,68,0.4);
         }
 
         .btn-live-panel-refresh {
-            background: #1e3a5f;
+            background: rgba(96,165,250,0.1);
             color: #60a5fa;
-            border: 1px solid #2563eb44;
-            padding: 6px 14px;
-            border-radius: 8px;
-            font-size: 11px;
+            border: 1px solid rgba(96,165,250,0.25);
+            padding: 8px 16px;
+            border-radius: 10px;
+            font-size: 12px;
             font-weight: 700;
             cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 5px;
+            gap: 6px;
             transition: all 0.2s;
+            font-family: 'Outfit', sans-serif;
         }
 
         .btn-live-panel-refresh:hover {
             background: #2563eb;
             color: white;
+            border-color: #2563eb;
+            box-shadow: 0 0 16px rgba(37,99,235,0.4);
         }
 
-        /* Column header row */
-        .live-panel-col-header {
-            display: grid;
-            grid-template-columns: 2fr 1.5fr 1.5fr 70px;
-            gap: 6px;
-            padding: 6px 14px;
-            background: #1e293b;
-            border-bottom: 1px solid #334155;
-            font-size: 10px;
-            font-weight: 700;
-            color: #64748b;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            flex-shrink: 0;
+        /* ── Stats bar ── */
+        .lp-stats-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 14px;
         }
 
-        /* Scrollable list */
-        .live-panel-list {
-            flex: 1;
-            overflow-y: auto;
-            padding: 6px 0;
-        }
-
-        .live-panel-list::-webkit-scrollbar { width: 4px; }
-        .live-panel-list::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
-
-        /* Each row — single line */
-        .live-panel-row {
-            display: grid;
-            grid-template-columns: 2fr 1.5fr 1.5fr 70px;
-            gap: 6px;
-            align-items: center;
-            padding: 9px 14px;
-            border-bottom: 1px solid #1e293b;
-            transition: background 0.15s;
-        }
-
-        .live-panel-row:hover {
-            background: #1e293b;
-        }
-
-        .live-panel-row.row-online {
-            border-left: 3px solid #22c55e;
-        }
-
-        .live-panel-row.row-offline {
-            border-left: 3px solid #334155;
-            opacity: 0.65;
-        }
-
-        .live-panel-cell {
-            font-size: 11px;
-            color: #cbd5e1;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .live-panel-cell.cell-server {
-            color: #60a5fa;
-            font-weight: 700;
-            font-size: 11px;
-        }
-
-        .live-panel-cell.cell-user {
-            color: #e2e8f0;
-            font-weight: 600;
-        }
-
-        .live-panel-cell.cell-token {
-            color: #94a3b8;
-            font-family: monospace;
-            font-size: 10px;
-        }
-
-        .live-panel-status {
+        .lp-stat-pill {
             display: flex;
             align-items: center;
-            gap: 4px;
-            justify-content: center;
+            gap: 6px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.07);
+            border-radius: 10px;
+            padding: 6px 12px;
+            font-size: 11px;
+            font-weight: 700;
         }
 
-        .live-panel-status-dot {
-            width: 6px;
-            height: 6px;
+        .lp-stat-pill .lp-stat-dot {
+            width: 7px; height: 7px;
             border-radius: 50%;
             flex-shrink: 0;
         }
 
-        .live-panel-status-dot.online {
-            background: #22c55e;
-            box-shadow: 0 0 5px #22c55e;
-            animation: pulse-green 1.5s infinite;
-        }
+        .lp-stat-pill.online-pill  { border-color: rgba(34,197,94,0.3); }
+        .lp-stat-pill.online-pill .lp-stat-dot  { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+        .lp-stat-pill.online-pill  .lp-stat-val  { color: #4ade80; }
+        .lp-stat-pill.offline-pill .lp-stat-dot { background: #475569; }
+        .lp-stat-pill.offline-pill .lp-stat-val { color: #94a3b8; }
+        .lp-stat-label { color: #64748b; }
+        .lp-stat-val   { color: #e2e8f0; font-size: 13px; }
 
-        .live-panel-status-dot.offline {
-            background: #475569;
-        }
-
-        .live-panel-status-text {
+        /* Column header row */
+        .live-panel-col-header {
+            display: grid;
+            grid-template-columns: 1.8fr 1.5fr 1.6fr 1fr 90px;
+            gap: 8px;
+            padding: 8px 16px 10px;
             font-size: 10px;
             font-weight: 700;
+            color: #334155;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            flex-shrink: 0;
         }
 
-        .live-panel-status-text.online { color: #4ade80; }
-        .live-panel-status-text.offline { color: #64748b; }
+        /* ── Scrollable list ── */
+        .live-panel-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px 14px;
+            position: relative;
+            z-index: 1;
+        }
 
+        .live-panel-list::-webkit-scrollbar { width: 4px; }
+        .live-panel-list::-webkit-scrollbar-track { background: transparent; }
+        .live-panel-list::-webkit-scrollbar-thumb { background: rgba(34,197,94,0.2); border-radius: 4px; }
+
+        /* ── Connection Card ── */
+        .live-panel-row {
+            display: flex;
+            flex-direction: column;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 16px;
+            margin-bottom: 10px;
+            overflow: hidden;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .live-panel-row:hover {
+            background: rgba(255,255,255,0.05);
+            transform: translateY(-1px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+        }
+
+        .live-panel-row.row-online {
+            border-color: rgba(34,197,94,0.25);
+            box-shadow: 0 0 0 1px rgba(34,197,94,0.05), 0 4px 20px rgba(34,197,94,0.08);
+        }
+
+        .live-panel-row.row-offline {
+            opacity: 0.5;
+        }
+
+        /* Top accent line */
+        .lp-card-accent {
+            height: 2px;
+            width: 100%;
+        }
+        .row-online  .lp-card-accent { background: linear-gradient(90deg, #22c55e, #4ade80, transparent); }
+        .row-offline .lp-card-accent { background: linear-gradient(90deg, #334155, transparent); }
+
+        /* Card body */
+        .lp-card-body {
+            padding: 12px 14px;
+        }
+
+        /* Row 1: status + server + badge */
+        .lp-card-row1 {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            margin-bottom: 10px;
+        }
+
+        .lp-status-dot {
+            width: 9px; height: 9px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .row-online  .lp-status-dot { background: #22c55e; box-shadow: 0 0 8px #22c55e99; animation: pulse-green 1.5s infinite; }
+        .row-offline .lp-status-dot { background: #475569; }
+
+        .lp-server-name {
+            font-size: 13px;
+            font-weight: 800;
+            color: #e2e8f0;
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            letter-spacing: -0.2px;
+        }
+
+        .lp-status-badge {
+            font-size: 10px;
+            font-weight: 800;
+            padding: 3px 10px;
+            border-radius: 20px;
+            letter-spacing: 0.3px;
+            flex-shrink: 0;
+        }
+        .row-online  .lp-status-badge { background: rgba(34,197,94,0.15); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
+        .row-offline .lp-status-badge { background: rgba(71,85,105,0.3); color: #64748b; border: 1px solid rgba(71,85,105,0.3); }
+
+        /* Row 2: info chips */
+        .lp-card-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+
+        .lp-chip {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 8px;
+            padding: 4px 10px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #cbd5e1;
+            white-space: nowrap;
+        }
+
+        .lp-chip i {
+            font-size: 9px;
+            color: #667eea;
+        }
+
+        .lp-chip.token-chip {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: #94a3b8;
+        }
+
+        .lp-chip.token-chip i { color: #818cf8; }
+
+        /* Row 3: GB bar */
+        .lp-gb-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .lp-gb-icon {
+            font-size: 9px;
+            color: #6366f1;
+            flex-shrink: 0;
+        }
+
+        .lp-gb-label {
+            font-size: 10px;
+            font-weight: 700;
+            color: #64748b;
+            flex-shrink: 0;
+        }
+
+        .lp-gb-bar-wrap {
+            flex: 1;
+            background: rgba(255,255,255,0.06);
+            border-radius: 6px;
+            height: 5px;
+            overflow: hidden;
+        }
+
+        .lp-gb-bar-fill {
+            height: 100%;
+            border-radius: 6px;
+            transition: width 0.6s ease;
+        }
+        .lp-gb-bar-fill.safe   { background: linear-gradient(90deg, #22c55e, #4ade80); }
+        .lp-gb-bar-fill.warn   { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+        .lp-gb-bar-fill.danger { background: linear-gradient(90deg, #ef4444, #f87171); }
+
+        .lp-gb-val {
+            font-size: 11px;
+            font-weight: 800;
+            color: #e2e8f0;
+            flex-shrink: 0;
+            min-width: 70px;
+            text-align: right;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .lp-gb-val.safe   { color: #4ade80; }
+        .lp-gb-val.warn   { color: #fbbf24; }
+        .lp-gb-val.danger { color: #f87171; }
+
+        /* Empty / Loading states */
         .live-panel-empty {
             text-align: center;
-            padding: 60px 20px;
-            color: #475569;
+            padding: 80px 20px;
+            color: #334155;
         }
 
         .live-panel-empty i {
-            font-size: 40px;
-            margin-bottom: 12px;
+            font-size: 48px;
+            margin-bottom: 14px;
             display: block;
+            opacity: 0.4;
+        }
+
+        .live-panel-empty p {
+            font-size: 14px;
+            font-weight: 600;
         }
 
         .live-panel-loading {
             text-align: center;
-            padding: 40px;
+            padding: 60px;
             color: #475569;
         }
 
@@ -2432,21 +2607,21 @@
                             <i class="fas fa-circle stat-icon"></i>
                             <span id="activeUsers">3</span>
                         </div>
-                        <div class="stat-label-small">Online</div>
+                        <div class="stat-label-small">Active</div>
                     </div>
                     <div class="stat-item inactive-stat">
                         <div class="stat-value-small">
                             <i class="fas fa-circle stat-icon"></i>
                             <span id="inactiveUsers">0</span>
                         </div>
-                        <div class="stat-label-small">Offline</div>
+                        <div class="stat-label-small">Inactive</div>
                     </div>
                     <div class="stat-item offline-stat">
                         <div class="stat-value-small">
                             <i class="fas fa-circle stat-icon"></i>
                             <span id="offlineUsers">1</span>
                         </div>
-                        <div class="stat-label-small">Expired</div>
+                        <div class="stat-label-small">Offline</div>
                     </div>
                     <div class="stat-item online-stat" onclick="openLivePanel()" title="View Live Connections">
                         <div class="stat-value-small">
@@ -2685,7 +2860,7 @@
         <!-- Notification -->
         <div class="notification-small" id="notification"></div>
 
-        <!-- ===== FULLSCREEN LIVE CONNECTIONS PANEL ===== -->
+        <!-- ===== FULLSCREEN LIVE CONNECTIONS PANEL — REDESIGNED ===== -->
         <div class="live-panel-overlay" id="livePanelOverlay">
 
             <!-- Sticky header -->
@@ -2696,7 +2871,7 @@
                         Live Connections
                         <span class="live-panel-count-badge" id="livePanelOnlineBadge">0 Online</span>
                     </div>
-                    <div style="display:flex;align-items:center;gap:8px;">
+                    <div class="lp-header-actions">
                         <button class="btn-live-panel-refresh" onclick="refreshLivePanel()">
                             <i class="fas fa-sync-alt" id="livePanelRefreshIcon"></i> Refresh
                         </button>
@@ -2705,20 +2880,27 @@
                         </button>
                     </div>
                 </div>
-                <!-- Column labels -->
-                <div class="live-panel-col-header">
-                    <span>Server</span>
-                    <span>Username</span>
-                    <span>Token ID</span>
-                    <span style="text-align:center;">Status</span>
+
+                <!-- Stats pills -->
+                <div class="lp-stats-bar" id="lpStatsPills">
+                    <div class="lp-stat-pill online-pill">
+                        <div class="lp-stat-dot"></div>
+                        <span class="lp-stat-label">Online</span>
+                        <span class="lp-stat-val" id="lpOnlinePillCount">0</span>
+                    </div>
+                    <div class="lp-stat-pill offline-pill">
+                        <div class="lp-stat-dot"></div>
+                        <span class="lp-stat-label">Offline</span>
+                        <span class="lp-stat-val" id="lpOfflinePillCount">0</span>
+                    </div>
                 </div>
             </div>
 
             <!-- Scrollable list -->
             <div class="live-panel-list" id="livePanelList">
                 <div class="live-panel-loading">
-                    <div class="loading-spinner-small" style="border-color:#334155;border-top-color:#22c55e;margin:0 auto 12px;"></div>
-                    <p>Loading...</p>
+                    <div class="loading-spinner-small" style="border-color:#1e293b;border-top-color:#22c55e;margin:0 auto 12px;"></div>
+                    <p style="color:#475569;font-size:13px;font-weight:600;">Loading connections...</p>
                 </div>
             </div>
 
@@ -2916,7 +3098,7 @@
         // Initialize the app
         function initApp() {
             // Set initial demo stats
-            updateCounters(4, 0, 4, 0);
+            updateCounters(4, 3, 0, 1);
             renderDemoUsers();
             updateTotalRevenue(demoUsers);
             
@@ -2979,7 +3161,7 @@
 
         // Recalculate counters using Supabase is_online, then re-render
         function recalcCountersAndRender() {
-            let onlineCount = 0, offlineCount = 0, expiredCount = 0;
+            let onlineCount = 0, activeCount = 0, inactiveCount = 0, expiredCount = 0;
             allUsers.forEach(user => {
                 const isExpired = user.expiryDate ? isDateExpired(user.expiryDate) : true;
                 if (isExpired) {
@@ -2987,11 +3169,15 @@
                 } else {
                     const liveConn = liveConns.find(c => c.token_id === user.token);
                     if (liveConn && liveConn.is_online === true) {
-                        // VPN ချိတ်ထား → Online
+                        // VPN ချိတ်ထား → Online (active ကိုပါ ရေတွက်)
                         onlineCount++;
+                        activeCount++;
+                    } else if (liveConn && liveConn.is_online === false) {
+                        // Supabase record ရှိ + VPN မချိတ်ထား → Offline
+                        inactiveCount++;
                     } else {
-                        // VPN မချိတ်ထား (record ရှိသော်လည်းကောင်း မရှိသော်လည်းကောင်း) → Offline
-                        offlineCount++;
+                        // Supabase record မရှိသေး → Active (ဘယ်တော့မှ ချိတ်မဖူးသေး)
+                        activeCount++;
                     }
                 }
             });
@@ -3000,9 +3186,9 @@
             const tabVipBadge = document.getElementById("tabVipCount");
             if (tabVipBadge) tabVipBadge.textContent = allUsers.length || demoUsers.length;
             if (allUsers.length === 0) {
-                updateCounters(4, 0, 4, 0); renderDemoUsers(); updateTotalRevenue(demoUsers);
+                updateCounters(4, 3, 0, 1); renderDemoUsers(); updateTotalRevenue(demoUsers);
             } else {
-                updateCounters(allUsers.length, onlineCount, offlineCount, expiredCount);
+                updateCounters(allUsers.length, activeCount, inactiveCount, expiredCount);
                 filteredUsers = [...allUsers]; renderUsers(); updateTotalRevenue(allUsers);
             }
         }
@@ -3022,7 +3208,7 @@
             }, (error) => {
                 console.error("Error loading users:", error);
                 // On error, show demo data
-                updateCounters(4, 0, 4, 0);
+                updateCounters(4, 3, 0, 1);
                 renderDemoUsers();
                 updateTotalRevenue(demoUsers);
                 showNotification("⚠️ Using demo data", "info");
@@ -3132,7 +3318,8 @@
 
         // Get user status with display text
         // Online  = Supabase server_connections.is_online === true  (VPN ချိတ်ထားသည်)
-        // Offline = VPN မချိတ်ထား (Supabase record ရှိသော်လည်းကောင်း မရှိသော်လည်းကောင်း)
+        // Offline = Supabase record ရှိပြီး is_online === false       (VPN ဖြုတ်ထားသည်)
+        // Active  = Supabase record မရှိသေး (ဘယ်တော့မှ ချိတ်မဖူးသေး သို့မဟုတ် load မရသေး)
         // Expired = expiry date ကျော်ပြီ
         function getUserStatus(user) {
             const isExpired = user.expiryDate ? isDateExpired(user.expiryDate) : true;
@@ -3157,13 +3344,21 @@
                     statusBadgeClass: "status-active-small",
                     statusTextClass: "status-text-online"
                 };
-            } else {
-                // VPN မချိတ်ထား (record ရှိသော်လည်းကောင်း မရှိသော်လည်းကောင်း) → Offline
+            } else if (liveConn && liveConn.is_online === false) {
+                // Supabase record ရှိသော်လည်း VPN မချိတ်ထား → Offline
                 return { 
                     statusClass: "inactive", 
                     statusText: "Offline",
                     statusBadgeClass: "status-offline-small",
                     statusTextClass: "status-text-offline"
+                };
+            } else {
+                // Supabase record မရှိသေး (ဘယ်တော့မှ ချိတ်မဖူးသေး) → Active
+                return { 
+                    statusClass: "active", 
+                    statusText: "Active",
+                    statusBadgeClass: "status-active-small",
+                    statusTextClass: "status-text-online"
                 };
             }
         }
@@ -3904,42 +4099,77 @@
         function renderLivePanelRows() {
             const list = document.getElementById('livePanelList');
             const badge = document.getElementById('livePanelOnlineBadge');
+            const onlinePill  = document.getElementById('lpOnlinePillCount');
+            const offlinePill = document.getElementById('lpOfflinePillCount');
 
             if (!liveConns || liveConns.length === 0) {
-                list.innerHTML = `<div class="live-panel-empty"><i class="fas fa-satellite-dish"></i><p>No connections yet</p></div>`;
+                list.innerHTML = `
+                    <div class="live-panel-empty">
+                        <i class="fas fa-satellite-dish"></i>
+                        <p>No connections yet</p>
+                    </div>`;
                 if (badge) badge.textContent = '0 Online';
+                if (onlinePill)  onlinePill.textContent  = '0';
+                if (offlinePill) offlinePill.textContent = '0';
                 return;
             }
 
-            const onlineCount = liveConns.filter(c => c.is_online).length;
-            if (badge) badge.textContent = onlineCount + ' Online';
+            const onlineCount  = liveConns.filter(c => c.is_online).length;
+            const offlineCount = liveConns.length - onlineCount;
+            if (badge)       badge.textContent       = onlineCount + ' Online';
+            if (onlinePill)  onlinePill.textContent  = onlineCount;
+            if (offlinePill) offlinePill.textContent = offlineCount;
 
             list.innerHTML = liveConns.map(c => {
-                const cls        = c.is_online ? 'online' : 'offline';
-                const rowCls     = c.is_online ? 'row-online' : 'row-offline';
-                const statusText = c.is_online ? '🟢 Online' : '⚪ Offline';
-                const tokenShort = c.token_id ? c.token_id.substring(0, 14) : '—';
+                const isOnline   = c.is_online;
+                const rowCls     = isOnline ? 'row-online' : 'row-offline';
+                const statusText = isOnline ? 'Online' : 'Offline';
                 const server     = c.server_name || '—';
                 const username   = c.username    || c.token_id || '—';
+                const tokenShort = c.token_id ? c.token_id.substring(0, 16) + '…' : '—';
 
-                // GB info for panel row
+                // GB bar
                 const liveBytes = Math.max(c.used_bytes || 0, usedBytesMap[c.token_id] || 0);
                 const fbUser    = allUsers.find(u => u.token === c.token_id);
                 const limitGb   = (c.gb_limit_gb > 0) ? c.gb_limit_gb
                                 : (fbUser && fbUser.gb_limit > 0) ? fbUser.gb_limit : 0;
                 const gbStr     = limitGb > 0
-                    ? `${fmtBytes(liveBytes)} / ${limitGb}GB`
+                    ? `${fmtBytes(liveBytes)} / ${limitGb} GB`
                     : fmtBytes(liveBytes);
+                const gbPct  = limitGb > 0 ? Math.min(100, (liveBytes / (limitGb * 1073741824)) * 100) : 0;
+                const gbCls  = gbPct >= 85 ? 'danger' : gbPct >= 60 ? 'warn' : 'safe';
+                const showBar = limitGb > 0;
 
                 return `
                 <div class="live-panel-row ${rowCls}">
-                    <div class="live-panel-cell cell-server" title="${server}">${server}</div>
-                    <div class="live-panel-cell cell-user"   title="${username}">${username}</div>
-                    <div class="live-panel-cell cell-token"  title="${c.token_id || ''}">${tokenShort}</div>
-                    <div class="live-panel-cell" style="font-size:10px;font-weight:700;color:${c.is_online?'#22c55e':'#94a3b8'};" title="${gbStr}">${gbStr}</div>
-                    <div class="live-panel-status">
-                        <div class="live-panel-status-dot ${cls}"></div>
-                        <span class="live-panel-status-text ${cls}">${statusText}</span>
+                    <div class="lp-card-accent"></div>
+                    <div class="lp-card-body">
+                        <!-- Row 1: status dot + server + badge -->
+                        <div class="lp-card-row1">
+                            <div class="lp-status-dot"></div>
+                            <div class="lp-server-name" title="${server}">${server}</div>
+                            <div class="lp-status-badge">${statusText}</div>
+                        </div>
+                        <!-- Row 2: chips -->
+                        <div class="lp-card-chips">
+                            <div class="lp-chip">
+                                <i class="fas fa-user"></i>
+                                ${username}
+                            </div>
+                            <div class="lp-chip token-chip">
+                                <i class="fas fa-key"></i>
+                                ${tokenShort}
+                            </div>
+                        </div>
+                        <!-- Row 3: GB bar -->
+                        <div class="lp-gb-row">
+                            <i class="fas fa-database lp-gb-icon"></i>
+                            <span class="lp-gb-label">Data</span>
+                            ${showBar ? `<div class="lp-gb-bar-wrap">
+                                <div class="lp-gb-bar-fill ${gbCls}" style="width:${gbPct}%"></div>
+                            </div>` : ''}
+                            <span class="lp-gb-val ${showBar ? gbCls : ''}">${gbStr}</span>
+                        </div>
                     </div>
                 </div>`;
             }).join('');
