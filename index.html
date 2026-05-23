@@ -2995,10 +2995,10 @@
             loadUsedBytes();
             loadLiveConnections();
 
-            // Auto-refresh live connections every 30s
+            // Auto-refresh live connections every 30s (always, not just on live tab)
             setInterval(() => {
                 loadUsedBytes();
-                if (currentTab === 'live') loadLiveConnections();
+                loadLiveConnections();  // always refresh so online count stays accurate
             }, 30000);
         }
 
@@ -3569,7 +3569,7 @@
             const tabLiveBadge = document.getElementById('tabLiveCount');
             const headerBadge  = document.getElementById('onlineConnCount');
 
-            const onlineCount = liveConns.filter(c => c.is_online).length;
+            const onlineCount = liveConns.filter(c => c.is_online && !c.disconnected_at).length;
             if (onlineCntEl)  onlineCntEl.textContent  = onlineCount + ' Online';
             if (tabLiveBadge) tabLiveBadge.textContent = liveConns.length;
             if (headerBadge)  headerBadge.textContent  = onlineCount;
@@ -3580,9 +3580,21 @@
             }
 
             list.innerHTML = liveConns.map(c => {
-                const cls         = c.is_online ? 'online' : 'offline';
-                const statusLabel = c.is_online ? '🟢 Online' : '⚪ Offline';
-                const statusTag   = c.is_online ? 'online' : 'offline';
+                // Stale detection: is_online=true but heartbeat (used_bytes) hasn't
+                // changed in 3+ min means app crashed without proper disconnect.
+                // We use connected_at as fallback: if connected_at is >5min ago
+                // and there's no recent live_update (app updates used_bytes every 60s),
+                // treat as potentially stale.
+                const nowMs = Date.now();
+                const connMs = c.connected_at ? new Date(c.connected_at).getTime() : 0;
+                const discMs = c.disconnected_at ? new Date(c.disconnected_at).getTime() : 0;
+                // Consider stale if: is_online=true AND disconnected_at exists (conflicting state)
+                const isStale = c.is_online && discMs > 0;
+                const effectiveOnline = c.is_online && !isStale;
+
+                const cls         = effectiveOnline ? 'online' : 'offline';
+                const statusLabel = effectiveOnline ? '🟢 Online' : (isStale ? '⚠️ Stale' : '⚪ Offline');
+                const statusTag   = effectiveOnline ? 'online' : 'offline';
 
                 // ── GB accounting ──────────────────────────────────────────────
                 // server_connections.used_bytes is now updated every 60s while online
@@ -3954,13 +3966,15 @@
                 return;
             }
 
-            const onlineCount = liveConns.filter(c => c.is_online).length;
+            const onlineCount = liveConns.filter(c => c.is_online && !c.disconnected_at).length;
             if (badge) badge.textContent = onlineCount + ' Online';
 
             list.innerHTML = liveConns.map(c => {
-                const cls        = c.is_online ? 'online' : 'offline';
-                const rowCls     = c.is_online ? 'row-online' : 'row-offline';
-                const statusText = c.is_online ? '🟢 Online' : '⚪ Offline';
+                const isStale    = c.is_online && !!c.disconnected_at;
+                const effOnline  = c.is_online && !isStale;
+                const cls        = effOnline ? 'online' : 'offline';
+                const rowCls     = effOnline ? 'row-online' : 'row-offline';
+                const statusText = effOnline ? '🟢 Online' : (isStale ? '⚠️ Stale' : '⚪ Offline');
                 const tokenShort = c.token_id ? c.token_id.substring(0, 14) : '—';
                 const server     = c.server_name || '—';
                 const username   = c.username    || c.token_id || '—';
