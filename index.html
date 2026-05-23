@@ -3584,24 +3584,6 @@
                 const statusLabel = c.is_online ? '🟢 Online' : '⚪ Offline';
                 const statusTag   = c.is_online ? 'online' : 'offline';
 
-                // ── Protocol badge ─────────────────────────────────────────────
-                const protoColors = {
-                    'SSH':         { bg: '#dbeafe', color: '#1d4ed8' },
-                    'TCP|PROXY':   { bg: '#ede9fe', color: '#6d28d9' },
-                    'TCP|SSL':     { bg: '#dcfce7', color: '#166534' },
-                    'SSL|PAYLOAD': { bg: '#fef3c7', color: '#92400e' },
-                    'SSL|PROXY':   { bg: '#fce7f3', color: '#9d174d' },
-                    'OpenVPN':     { bg: '#ffedd5', color: '#9a3412' },
-                    'UDP':         { bg: '#cffafe', color: '#155e75' },
-                    'SlowDNS':     { bg: '#f3f4f6', color: '#374151' },
-                    'V2Ray':       { bg: '#fdf4ff', color: '#7e22ce' },
-                };
-                const protoType = c.server_type || '';
-                const pc = protoColors[protoType] || { bg: '#f1f5f9', color: '#64748b' };
-                const protoBadge = protoType
-                    ? `<span style="font-size:9px;font-weight:700;background:${pc.bg};color:${pc.color};border-radius:4px;padding:1px 6px;margin-left:4px;">${protoType}</span>`
-                    : '';
-
                 // ── GB accounting ──────────────────────────────────────────────
                 // server_connections.used_bytes is now updated every 60s while online
                 // used_bytes_log.total_bytes is the last-disconnect value
@@ -3654,7 +3636,7 @@
                             <i class="fas fa-key"></i><span title="${c.token_id || ''}">${c.token_id ? c.token_id.substring(0,14)+'…' : '—'}</span>
                         </div>
                         <div class="live-conn-detail">
-                            <i class="fas fa-server"></i><span>${c.server_name || '—'}${protoBadge}</span>
+                            <i class="fas fa-server"></i><span>${c.server_name || '—'}</span>
                         </div>
                         <div class="live-conn-detail">
                             <i class="fas fa-clock"></i><span>${fmtTime(c.connected_at)}</span>
@@ -3824,29 +3806,9 @@
                 return;
             }
             
-            // 1. Mark server_connections offline BEFORE / alongside Firebase delete
-            const enc = encodeURIComponent(token);
-            const markOffline = fetch(`${SB_URL}/rest/v1/server_connections?token_id=eq.${enc}`, {
-                method: "PATCH",
-                headers: {
-                    "apikey": SB_KEY,
-                    "Authorization": "Bearer " + SB_KEY,
-                    "Content-Type": "application/json",
-                    "Prefer": "return=minimal"
-                },
-                body: JSON.stringify({ is_online: false })
-            }).catch(() => {});   // ignore network errors — non-critical
-
-            // 2. Delete from Firebase
-            Promise.all([markOffline,
-                db.collection("users").doc(token).delete()
-            ])
+            db.collection("users").doc(token).delete()
                 .then(() => {
                     showNotification("🗑️ User deleted successfully", "success");
-                    // Update local liveConns cache so UI reflects offline immediately
-                    const liveConn = liveConns.find(c => c.token_id === token);
-                    if (liveConn) liveConn.is_online = false;
-                    renderLiveConnections();
                 })
                 .catch(error => {
                     showNotification("❌ Error deleting user: " + error.message, "error");
@@ -4002,7 +3964,6 @@
                 const tokenShort = c.token_id ? c.token_id.substring(0, 14) : '—';
                 const server     = c.server_name || '—';
                 const username   = c.username    || c.token_id || '—';
-                const protoLabel = c.server_type ? ` [${c.server_type}]` : '';
 
                 // GB info for panel row
                 const liveBytes = Math.max(c.used_bytes || 0, usedBytesMap[c.token_id] || 0);
@@ -4015,7 +3976,7 @@
 
                 return `
                 <div class="live-panel-row ${rowCls}">
-                    <div class="live-panel-cell cell-server" title="${server}${protoLabel}">${server}${protoLabel}</div>
+                    <div class="live-panel-cell cell-server" title="${server}">${server}</div>
                     <div class="live-panel-cell cell-user"   title="${username}">${username}</div>
                     <div class="live-panel-cell cell-token"  title="${c.token_id || ''}">${tokenShort}</div>
                     <div class="live-panel-cell" style="font-size:10px;font-weight:700;color:${c.is_online?'#22c55e':'#94a3b8'};" title="${gbStr}">${gbStr}</div>
