@@ -2998,7 +2998,7 @@
             // Auto-refresh live connections every 30s (always, not just on live tab)
             setInterval(() => {
                 loadUsedBytes();
-                loadLiveConnections();  // always refresh so online count stays accurate
+                loadLiveConnections();
             }, 30000);
         }
 
@@ -3580,21 +3580,9 @@
             }
 
             list.innerHTML = liveConns.map(c => {
-                // Stale detection: is_online=true but heartbeat (used_bytes) hasn't
-                // changed in 3+ min means app crashed without proper disconnect.
-                // We use connected_at as fallback: if connected_at is >5min ago
-                // and there's no recent live_update (app updates used_bytes every 60s),
-                // treat as potentially stale.
-                const nowMs = Date.now();
-                const connMs = c.connected_at ? new Date(c.connected_at).getTime() : 0;
-                const discMs = c.disconnected_at ? new Date(c.disconnected_at).getTime() : 0;
-                // Consider stale if: is_online=true AND disconnected_at exists (conflicting state)
-                const isStale = c.is_online && discMs > 0;
-                const effectiveOnline = c.is_online && !isStale;
-
-                const cls         = effectiveOnline ? 'online' : 'offline';
-                const statusLabel = effectiveOnline ? '🟢 Online' : (isStale ? '⚠️ Stale' : '⚪ Offline');
-                const statusTag   = effectiveOnline ? 'online' : 'offline';
+                const cls         = c.is_online ? 'online' : 'offline';
+                const statusLabel = c.is_online ? '🟢 Online' : '⚪ Offline';
+                const statusTag   = c.is_online ? 'online' : 'offline';
 
                 // ── GB accounting ──────────────────────────────────────────────
                 // server_connections.used_bytes is now updated every 60s while online
@@ -3802,29 +3790,82 @@
         }
 
         // Delete user by token (for button click)
-        function deleteUserByToken(token) {
+        async function deleteUserByToken(token) {
             if (!token) {
                 showNotification("Please select a user to delete", "error");
                 return;
             }
-            
-            if (!confirm(`Are you sure you want to delete user "${token}"?`)) {
+
+            if (!confirm(`Are you sure you want to delete user "${token}"?\n\nFirebase + Supabase မှ data အားလုံး ဖျက်မည်။`)) {
                 return;
             }
-            
+
             // If using demo data
             if (allUsers.length === 0) {
                 showNotification("Demo data - cannot delete", "info");
                 return;
             }
-            
-            db.collection("users").doc(token).delete()
-                .then(() => {
-                    showNotification("🗑️ User deleted successfully", "success");
-                })
-                .catch(error => {
-                    showNotification("❌ Error deleting user: " + error.message, "error");
-                });
+
+            showNotification("🗑️ Deleting...", "info");
+            const enc = encodeURIComponent(token);
+            const sbHeaders = {
+                "apikey": SB_KEY,
+                "Authorization": "Bearer " + SB_KEY,
+                "Content-Type": "application/json",
+                "Prefer": "return=minimal"
+            };
+
+            try {
+                // ── 1) Firebase users ──────────────────────────────────────
+                await db.collection("users").doc(token).delete();
+
+                // ── 2) Supabase: mark server_connections offline first ──────
+                //    (so Live panel shows Offline even before row is deleted)
+                try {
+                    await fetch(`${SB_URL}/rest/v1/server_connections?token_id=eq.${enc}`, {
+                        method: "PATCH",
+                        headers: sbHeaders,
+                        body: JSON.stringify({
+                            is_online: false,
+                            disconnected_at: new Date().toISOString()
+                        })
+                    });
+                } catch(e) { console.warn("sc patch failed", e); }
+
+                // ── 3) Supabase: DELETE server_connections row ─────────────
+                try {
+                    await fetch(`${SB_URL}/rest/v1/server_connections?token_id=eq.${enc}`, {
+                        method: "DELETE", headers: sbHeaders
+                    });
+                } catch(e) { console.warn("sc delete failed", e); }
+
+                // ── 4) Supabase: DELETE used_bytes_log row ─────────────────
+                try {
+                    await fetch(`${SB_URL}/rest/v1/used_bytes_log?token_id=eq.${enc}`, {
+                        method: "DELETE", headers: sbHeaders
+                    });
+                } catch(e) { console.warn("ubl delete failed", e); }
+
+                // ── 5) Supabase: DELETE server_data_usage rows ─────────────
+                try {
+                    await fetch(`${SB_URL}/rest/v1/server_data_usage?token_id=eq.${enc}`, {
+                        method: "DELETE", headers: sbHeaders
+                    });
+                } catch(e) { console.warn("sdu delete failed", e); }
+
+                // ── 6) Update local caches ─────────────────────────────────
+                liveConns      = liveConns.filter(c => c.token_id !== token);
+                serverDataUsage = serverDataUsage.filter(r => r.token_id !== token);
+                delete usedBytesMap[token];
+
+                renderLiveConnections();
+                if (allUsers.length > 0) renderUsers();
+
+                showNotification("🗑️ User deleted (Firebase + Supabase) ✅", "success");
+
+            } catch (error) {
+                showNotification("❌ Error deleting user: " + error.message, "error");
+            }
         }
 
         // CRUD Operations
@@ -3970,11 +4011,9 @@
             if (badge) badge.textContent = onlineCount + ' Online';
 
             list.innerHTML = liveConns.map(c => {
-                const isStale    = c.is_online && !!c.disconnected_at;
-                const effOnline  = c.is_online && !isStale;
-                const cls        = effOnline ? 'online' : 'offline';
-                const rowCls     = effOnline ? 'row-online' : 'row-offline';
-                const statusText = effOnline ? '🟢 Online' : (isStale ? '⚠️ Stale' : '⚪ Offline');
+                const cls        = c.is_online ? 'online' : 'offline';
+                const rowCls     = c.is_online ? 'row-online' : 'row-offline';
+                const statusText = c.is_online ? '🟢 Online' : '⚪ Offline';
                 const tokenShort = c.token_id ? c.token_id.substring(0, 14) : '—';
                 const server     = c.server_name || '—';
                 const username   = c.username    || c.token_id || '—';
