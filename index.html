@@ -3489,7 +3489,7 @@
             document.getElementById('tabLive').classList.toggle('active', tab === 'live');
             document.getElementById('tabContentVip').classList.toggle('active', tab === 'vip');
             document.getElementById('tabContentLive').classList.toggle('active', tab === 'live');
-            if (tab === 'live') loadLiveConnections();
+            if (tab === 'live') { loadLiveConnections(); startLiveAutoRefresh(); }
         }
         window.switchTab = switchTab;
 
@@ -3505,17 +3505,34 @@
         }
 
         // ── SUPABASE: Live Connections ────────────────────
-        // ── Online/Offline: timestamp-based (App ကနေ is_online မရောက်ရင်လည်း မှန်ကန်အောင်) ──
-        // connected_at ရှိပြီး disconnected_at > connected_at ဆိုမှ Offline
-        // otherwise (disconnected_at မရှိ / disconnected_at <= connected_at) → Online
+        // ── Online/Offline: timestamp-based ────────────────────────────────
+        // App ကနေ is_online=false PATCH မရောက်ဘဲ App crash/uninstall ဖြစ်ရင်လည်း
+        // connected_at vs disconnected_at timestamp ကနေ မှန်ကန်စွာ ဆုံးဖြတ်မည်
         function isActuallyOnline(c) {
             if (!c.connected_at) return false;
             const connMs = new Date(c.connected_at).getTime();
-            const discMs = c.disconnected_at ? new Date(c.disconnected_at).getTime() : 0;
-            return discMs <= connMs; // disc ဦးဆုံးဖြစ်ခဲ့တာ / မရှိရင် Online
+            // disconnected_at ရှိပြီး connected_at ထက် နောက်မဆိုရင် Offline
+            if (c.disconnected_at) {
+                const discMs = new Date(c.disconnected_at).getTime();
+                if (discMs > connMs) return false; // disconnect ဖြစ်ပြီ
+            }
+            // connected_at ရှိပြီး disconnect မဖြစ်သေးဘဲ → Online ဟုယူဆ
+            // ဒါပေမဲ့ connected_at က 24 နာရီကျော်ပြီဆိုရင် stale သတ်မှတ်မည်
+            const ageMs = Date.now() - connMs;
+            if (ageMs > 24 * 60 * 60 * 1000) return false; // 24h stale
+            return true;
         }
 
-                async function loadLiveConnections() {
+                // Auto-refresh live connections every 60s
+        let _liveAutoRefreshTimer = null;
+        function startLiveAutoRefresh() {
+            if (_liveAutoRefreshTimer) clearInterval(_liveAutoRefreshTimer);
+            _liveAutoRefreshTimer = setInterval(() => {
+                loadLiveConnections();
+            }, 60000);
+        }
+
+        async function loadLiveConnections() {
             if (liveRefreshing) return;
             liveRefreshing = true;
             const icon = document.getElementById('refreshIcon');
@@ -3527,11 +3544,11 @@
                     sbFetch("server_connections?select=*&order=is_online.desc,connected_at.desc&limit=500"),
                     sbFetch("server_data_usage?select=*&order=token_id.asc&limit=1000").catch(() => [])
                 ]);
-                // Override is_online using timestamp logic (reliable even if App fails to PATCH)
+                // Override is_online with timestamp logic
                 liveConns = (connRows || []).map(c => ({ ...c, is_online: isActuallyOnline(c) }));
                 serverDataUsage = sduRows || [];
 
-                // Sync live used_bytes into usedBytesMap (prefer live value if online & larger)
+                // Sync live used_bytes into usedBytesMap
                 liveConns.forEach(c => {
                     if (c.is_online && c.used_bytes > 0) {
                         const existing = usedBytesMap[c.token_id] || 0;
@@ -3936,7 +3953,7 @@
                     sbFetch("server_connections?select=*&order=is_online.desc,connected_at.desc&limit=500"),
                     sbFetch("server_data_usage?select=*&order=token_id.asc&limit=1000").catch(() => [])
                 ]);
-                // Override is_online using timestamp logic
+                // Override is_online with timestamp logic
                 liveConns = (rows || []).map(c => ({ ...c, is_online: isActuallyOnline(c) }));
                 serverDataUsage = sduRows || [];
                 // Sync live bytes into usedBytesMap
