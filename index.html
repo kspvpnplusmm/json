@@ -3505,21 +3505,17 @@
         }
 
         // ── SUPABASE: Live Connections ────────────────────
-        // ── Timestamp-based online check ──────────────────────────────────
-        // is_online field ကို App ကနေ reliable မပို့တဲ့ case အတွက်
-        // connected_at vs disconnected_at timestamp ကနေ online/offline ဆုံးဖြတ်မည်
+        // ── Online/Offline: timestamp-based (App ကနေ is_online မရောက်ရင်လည်း မှန်ကန်အောင်) ──
+        // connected_at ရှိပြီး disconnected_at > connected_at ဆိုမှ Offline
+        // otherwise (disconnected_at မရှိ / disconnected_at <= connected_at) → Online
         function isActuallyOnline(c) {
             if (!c.connected_at) return false;
-            const connTime  = new Date(c.connected_at).getTime();
-            const discTime  = c.disconnected_at ? new Date(c.disconnected_at).getTime() : 0;
-            // disconnected_at က connected_at ထက် နောက်ဆိုရင် → Offline
-            if (discTime > connTime) return false;
-            // connected_at ရှိပြီး disconnected_at မရှိ/ဟောင်းဆိုရင် → Online ဟု ယူဆ
-            // ဒါပေမဲ့ connected_at က 30 မိနစ်ကျော်ပြီဆိုရင် stale ဟု မယူဆ (user ရဲ့ choice)
-            return true;
+            const connMs = new Date(c.connected_at).getTime();
+            const discMs = c.disconnected_at ? new Date(c.disconnected_at).getTime() : 0;
+            return discMs <= connMs; // disc ဦးဆုံးဖြစ်ခဲ့တာ / မရှိရင် Online
         }
 
-        async function loadLiveConnections() {
+                async function loadLiveConnections() {
             if (liveRefreshing) return;
             liveRefreshing = true;
             const icon = document.getElementById('refreshIcon');
@@ -3528,17 +3524,14 @@
             try {
                 // Fetch live connections + per-server breakdown in parallel
                 const [connRows, sduRows] = await Promise.all([
-                    sbFetch("server_connections?select=*&order=connected_at.desc&limit=500"),
+                    sbFetch("server_connections?select=*&order=is_online.desc,connected_at.desc&limit=500"),
                     sbFetch("server_data_usage?select=*&order=token_id.asc&limit=1000").catch(() => [])
                 ]);
-                // ── Override is_online with timestamp logic ─────────────
-                liveConns = (connRows || []).map(c => ({
-                    ...c,
-                    is_online: isActuallyOnline(c)
-                }));
+                // Override is_online using timestamp logic (reliable even if App fails to PATCH)
+                liveConns = (connRows || []).map(c => ({ ...c, is_online: isActuallyOnline(c) }));
                 serverDataUsage = sduRows || [];
 
-                // Sync live used_bytes into usedBytesMap
+                // Sync live used_bytes into usedBytesMap (prefer live value if online & larger)
                 liveConns.forEach(c => {
                     if (c.is_online && c.used_bytes > 0) {
                         const existing = usedBytesMap[c.token_id] || 0;
@@ -3940,14 +3933,11 @@
             if (icon) icon.style.animation = 'spin 1s linear infinite';
             try {
                 const [rows, sduRows] = await Promise.all([
-                    sbFetch("server_connections?select=*&order=connected_at.desc&limit=500"),
+                    sbFetch("server_connections?select=*&order=is_online.desc,connected_at.desc&limit=500"),
                     sbFetch("server_data_usage?select=*&order=token_id.asc&limit=1000").catch(() => [])
                 ]);
-                // ── Override is_online with timestamp logic ─────────────
-                liveConns = (rows || []).map(c => ({
-                    ...c,
-                    is_online: isActuallyOnline(c)
-                }));
+                // Override is_online using timestamp logic
+                liveConns = (rows || []).map(c => ({ ...c, is_online: isActuallyOnline(c) }));
                 serverDataUsage = sduRows || [];
                 // Sync live bytes into usedBytesMap
                 liveConns.forEach(c => {
@@ -4056,13 +4046,9 @@
 
             const enc = encodeURIComponent(tokenId);
 
-            // 1) server_connections  →  used_bytes = 0, disconnected_at = now (offline mark)
+            // 1) server_connections  →  used_bytes = 0
             const s1 = await safePatch("server_connections",
-                `token_id=eq.${enc}`, {
-                    used_bytes: 0,
-                    is_online: false,
-                    disconnected_at: new Date().toISOString()
-                });
+                `token_id=eq.${enc}`, { used_bytes: 0 });
 
             // 2) used_bytes_log  →  total_bytes = 0
             let s2 = await safePatch("used_bytes_log",
