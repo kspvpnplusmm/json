@@ -3508,19 +3508,27 @@
         // ── Online/Offline: timestamp-based ────────────────────────────────
         // App ကနေ is_online=false PATCH မရောက်ဘဲ App crash/uninstall ဖြစ်ရင်လည်း
         // connected_at vs disconnected_at timestamp ကနေ မှန်ကန်စွာ ဆုံးဖြတ်မည်
+        // ── Online/Offline detection (heartbeat-based) ──────────────────────
+        // App က 60s တစ်ကြိမ် last_heartbeat update လုပ်မည်။
+        // heartbeat ရပ်သွားရင် (VPN ဖြတ်/app kill/uninstall) 3 မိနစ်အတွင်း Offline ပြမည်။
         function isActuallyOnline(c) {
             if (!c.connected_at) return false;
+
+            // ── 1. Heartbeat check (ပိုတိကျသည်) ──────────────────────────────
+            if (c.last_heartbeat) {
+                const hbAge = Date.now() - new Date(c.last_heartbeat).getTime();
+                // 3 မိနစ်အတွင်း heartbeat ရှိလျှင် Online; ကျော်လျှင် Offline
+                return hbAge < 3 * 60 * 1000;
+            }
+
+            // ── 2. Fallback: timestamp logic (heartbeat မပါသည့် ဟောင်း rows) ──
             const connMs = new Date(c.connected_at).getTime();
-            // disconnected_at ရှိပြီး connected_at ထက် နောက်မဆိုရင် Offline
             if (c.disconnected_at) {
                 const discMs = new Date(c.disconnected_at).getTime();
                 if (discMs > connMs) return false; // disconnect ဖြစ်ပြီ
             }
-            // connected_at ရှိပြီး disconnect မဖြစ်သေးဘဲ → Online ဟုယူဆ
-            // ဒါပေမဲ့ connected_at က 24 နာရီကျော်ပြီဆိုရင် stale သတ်မှတ်မည်
-            const ageMs = Date.now() - connMs;
-            if (ageMs > 24 * 60 * 60 * 1000) return false; // 24h stale
-            return true;
+            // heartbeat မပါ row — 5 မိနစ်ပဲ ယုံမည် (was 24h)
+            return (Date.now() - connMs) <= 5 * 60 * 1000;
         }
 
                 // Auto-refresh live connections every 60s
