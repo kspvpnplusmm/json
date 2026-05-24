@@ -2995,10 +2995,10 @@
             loadUsedBytes();
             loadLiveConnections();
 
-            // Auto-refresh live connections every 30s (always, not just on live tab)
+            // Auto-refresh live connections every 30s
             setInterval(() => {
                 loadUsedBytes();
-                loadLiveConnections();
+                if (currentTab === 'live') loadLiveConnections();
             }, 30000);
         }
 
@@ -3241,6 +3241,18 @@
                 const status = getUserStatus(user);
                 
                 const price = calcPrice(daysRemaining.days);
+
+                // ── VPN Online/Offline status from liveConns ──────────────
+                const liveEntry   = liveConns.find(c => c.token_id === user.token);
+                const isVpnOnline = liveEntry && liveEntry.is_online;
+                const vpnBadge    = isVpnOnline
+                    ? `<span style="display:inline-flex;align-items:center;gap:4px;background:#dcfce7;color:#166534;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:700;letter-spacing:.3px;">
+                         <span style="width:7px;height:7px;border-radius:50%;background:#22c55e;box-shadow:0 0 5px #22c55e;animation:pulse-green 1.5s infinite;display:inline-block;"></span> Online
+                       </span>`
+                    : `<span style="display:inline-flex;align-items:center;gap:4px;background:#f1f5f9;color:#64748b;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:700;">
+                         <span style="width:7px;height:7px;border-radius:50%;background:#94a3b8;display:inline-block;"></span> Offline
+                       </span>`;
+
                 return `
                     <div class="user-item ${status.statusClass}" 
                          data-token="${user.token}">
@@ -3257,6 +3269,7 @@
                             <span class="status-text-value ${status.statusTextClass}">
                                 ${status.statusText}
                             </span>
+                            <span style="margin-left:auto;">${vpnBadge}</span>
                         </div>
                         
                         <div class="user-header-small">
@@ -3321,6 +3334,18 @@
                 const status = getUserStatus(user);
                 
                 const price = calcPrice(daysRemaining.days);
+
+                // ── VPN Online/Offline status from liveConns ──────────────
+                const liveEntry2   = liveConns.find(c => c.token_id === user.token);
+                const isVpnOnline2 = liveEntry2 && liveEntry2.is_online;
+                const vpnBadge2    = isVpnOnline2
+                    ? `<span style="display:inline-flex;align-items:center;gap:4px;background:#dcfce7;color:#166534;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:700;">
+                         <span style="width:7px;height:7px;border-radius:50%;background:#22c55e;box-shadow:0 0 5px #22c55e;animation:pulse-green 1.5s infinite;display:inline-block;"></span> Online
+                       </span>`
+                    : `<span style="display:inline-flex;align-items:center;gap:4px;background:#f1f5f9;color:#64748b;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:700;">
+                         <span style="width:7px;height:7px;border-radius:50%;background:#94a3b8;display:inline-block;"></span> Offline
+                       </span>`;
+
                 return `
                     <div class="user-item ${status.statusClass}" 
                          data-token="${user.token}">
@@ -3337,6 +3362,7 @@
                             <span class="status-text-value ${status.statusTextClass}">
                                 ${status.statusText}
                             </span>
+                            <span style="margin-left:auto;">${vpnBadge2}</span>
                         </div>
                         
                         <div class="user-header-small">
@@ -3569,7 +3595,7 @@
             const tabLiveBadge = document.getElementById('tabLiveCount');
             const headerBadge  = document.getElementById('onlineConnCount');
 
-            const onlineCount = liveConns.filter(c => c.is_online && !c.disconnected_at).length;
+            const onlineCount = liveConns.filter(c => c.is_online).length;
             if (onlineCntEl)  onlineCntEl.textContent  = onlineCount + ' Online';
             if (tabLiveBadge) tabLiveBadge.textContent = liveConns.length;
             if (headerBadge)  headerBadge.textContent  = onlineCount;
@@ -3790,82 +3816,29 @@
         }
 
         // Delete user by token (for button click)
-        async function deleteUserByToken(token) {
+        function deleteUserByToken(token) {
             if (!token) {
                 showNotification("Please select a user to delete", "error");
                 return;
             }
-
-            if (!confirm(`Are you sure you want to delete user "${token}"?\n\nFirebase + Supabase မှ data အားလုံး ဖျက်မည်။`)) {
+            
+            if (!confirm(`Are you sure you want to delete user "${token}"?`)) {
                 return;
             }
-
+            
             // If using demo data
             if (allUsers.length === 0) {
                 showNotification("Demo data - cannot delete", "info");
                 return;
             }
-
-            showNotification("🗑️ Deleting...", "info");
-            const enc = encodeURIComponent(token);
-            const sbHeaders = {
-                "apikey": SB_KEY,
-                "Authorization": "Bearer " + SB_KEY,
-                "Content-Type": "application/json",
-                "Prefer": "return=minimal"
-            };
-
-            try {
-                // ── 1) Firebase users ──────────────────────────────────────
-                await db.collection("users").doc(token).delete();
-
-                // ── 2) Supabase: mark server_connections offline first ──────
-                //    (so Live panel shows Offline even before row is deleted)
-                try {
-                    await fetch(`${SB_URL}/rest/v1/server_connections?token_id=eq.${enc}`, {
-                        method: "PATCH",
-                        headers: sbHeaders,
-                        body: JSON.stringify({
-                            is_online: false,
-                            disconnected_at: new Date().toISOString()
-                        })
-                    });
-                } catch(e) { console.warn("sc patch failed", e); }
-
-                // ── 3) Supabase: DELETE server_connections row ─────────────
-                try {
-                    await fetch(`${SB_URL}/rest/v1/server_connections?token_id=eq.${enc}`, {
-                        method: "DELETE", headers: sbHeaders
-                    });
-                } catch(e) { console.warn("sc delete failed", e); }
-
-                // ── 4) Supabase: DELETE used_bytes_log row ─────────────────
-                try {
-                    await fetch(`${SB_URL}/rest/v1/used_bytes_log?token_id=eq.${enc}`, {
-                        method: "DELETE", headers: sbHeaders
-                    });
-                } catch(e) { console.warn("ubl delete failed", e); }
-
-                // ── 5) Supabase: DELETE server_data_usage rows ─────────────
-                try {
-                    await fetch(`${SB_URL}/rest/v1/server_data_usage?token_id=eq.${enc}`, {
-                        method: "DELETE", headers: sbHeaders
-                    });
-                } catch(e) { console.warn("sdu delete failed", e); }
-
-                // ── 6) Update local caches ─────────────────────────────────
-                liveConns      = liveConns.filter(c => c.token_id !== token);
-                serverDataUsage = serverDataUsage.filter(r => r.token_id !== token);
-                delete usedBytesMap[token];
-
-                renderLiveConnections();
-                if (allUsers.length > 0) renderUsers();
-
-                showNotification("🗑️ User deleted (Firebase + Supabase) ✅", "success");
-
-            } catch (error) {
-                showNotification("❌ Error deleting user: " + error.message, "error");
-            }
+            
+            db.collection("users").doc(token).delete()
+                .then(() => {
+                    showNotification("🗑️ User deleted successfully", "success");
+                })
+                .catch(error => {
+                    showNotification("❌ Error deleting user: " + error.message, "error");
+                });
         }
 
         // CRUD Operations
@@ -4007,7 +3980,7 @@
                 return;
             }
 
-            const onlineCount = liveConns.filter(c => c.is_online && !c.disconnected_at).length;
+            const onlineCount = liveConns.filter(c => c.is_online).length;
             if (badge) badge.textContent = onlineCount + ' Online';
 
             list.innerHTML = liveConns.map(c => {
