@@ -4181,13 +4181,36 @@
             usedBytesMap[tokenId] = 0;
             serverDataUsage = serverDataUsage.filter(r => r.token_id !== tokenId);
             const liveConn = liveConns.find(c => c.token_id === tokenId);
-            if (liveConn) liveConn.used_bytes = 0;
+            if (liveConn) {
+                liveConn.used_bytes = 0;
+            }
 
             if (allUsers.length > 0) renderUsers();
             renderLiveConnections();
 
             showNotification(`✅ "${tokenId.substring(0,10)}…" GB Reset ပြီးပါပြီ`, "success");
             console.log(`resetGbUsage: sc=${s1}, log=${s2}, sdu=deleted`);
+
+            // ── App ဘက် memory ထဲ bytes ဟောင်း မပြန်ဝင်အောင် 3s နောက် Supabase ကနေ re-verify ──
+            // (App က 60s heartbeat နဲ့ old bytes ပြန်ရေးနိုင်သောကြောင့် confirm ပြန်ဆွဲသည်)
+            setTimeout(async () => {
+                try {
+                    // Force used_bytes=0 PATCH ထပ်ပြု (app heartbeat ၏ ပြန်ရေးမှုကို overwrite)
+                    await fetch(`${SB_URL}/rest/v1/server_connections?token_id=eq.${encodeURIComponent(tokenId)}`, {
+                        method: "PATCH",
+                        headers: {
+                            "apikey": SB_KEY,
+                            "Authorization": "Bearer " + SB_KEY,
+                            "Content-Type": "application/json",
+                            "Prefer": "return=minimal"
+                        },
+                        body: JSON.stringify({ used_bytes: 0 })
+                    });
+                    // Re-fetch from Supabase to verify and update UI with real server value
+                    await loadLiveConnections();
+                    console.log("resetGbUsage: re-verified used_bytes=0 after 3s");
+                } catch(e) { console.warn("resetGbUsage re-verify failed", e); }
+            }, 3000);
         }
         window.resetGbUsage = resetGbUsage;
     </script>
