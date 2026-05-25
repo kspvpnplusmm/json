@@ -2807,6 +2807,7 @@
         let currentEditToken = null;
         let usedBytesMap      = {};   // token_id -> total_bytes (from used_bytes_log)
         let liveConns         = [];   // server_connections rows (has live used_bytes updated every 60s)
+        let resetTokens       = new Set(); // tokens that were just reset — protect from stale DB data
         let serverDataUsage   = [];   // server_data_usage rows  (per-token, per-server breakdown)
         let liveRefreshing    = false;
         let currentTab     = 'vip';
@@ -3500,7 +3501,14 @@
             try {
                 const rows = await sbFetch("used_bytes_log?select=token_id,total_bytes&limit=1000");
                 usedBytesMap = {};
-                rows.forEach(r => { usedBytesMap[r.token_id] = r.total_bytes || 0; });
+                rows.forEach(r => {
+                    // If this token was recently reset, keep it at 0 — ignore stale DB value
+                    if (resetTokens.has(r.token_id)) {
+                        usedBytesMap[r.token_id] = 0;
+                    } else {
+                        usedBytesMap[r.token_id] = r.total_bytes || 0;
+                    }
+                });
                 // Re-render user cards to show updated GB usage
                 if (allUsers.length > 0) renderUsers();
             } catch (e) { console.warn("usedBytes fetch error", e); }
@@ -3586,7 +3594,7 @@
 
                 // Sync live used_bytes into usedBytesMap
                 liveConns.forEach(c => {
-                    if (c.is_online && c.used_bytes > 0) {
+                    if (c.is_online && c.used_bytes > 0 && !resetTokens.has(c.token_id)) {
                         const existing = usedBytesMap[c.token_id] || 0;
                         if (c.used_bytes > existing) usedBytesMap[c.token_id] = c.used_bytes;
                     }
@@ -4036,7 +4044,7 @@
                 serverDataUsage = sduRows || [];
                 // Sync live bytes into usedBytesMap
                 liveConns.forEach(c => {
-                    if (c.is_online && c.used_bytes > 0) {
+                    if (c.is_online && c.used_bytes > 0 && !resetTokens.has(c.token_id)) {
                         const ex = usedBytesMap[c.token_id] || 0;
                         if (c.used_bytes > ex) usedBytesMap[c.token_id] = c.used_bytes;
                     }
@@ -4181,36 +4189,18 @@
             usedBytesMap[tokenId] = 0;
             serverDataUsage = serverDataUsage.filter(r => r.token_id !== tokenId);
             const liveConn = liveConns.find(c => c.token_id === tokenId);
-            if (liveConn) {
-                liveConn.used_bytes = 0;
-            }
+            if (liveConn) liveConn.used_bytes = 0;
+
+            // Mark this token as reset — prevents auto-refresh from restoring stale DB data
+            resetTokens.add(tokenId);
+            // Clear protection after 5 minutes (DB should be clean by then)
+            setTimeout(() => resetTokens.delete(tokenId), 5 * 60 * 1000);
 
             if (allUsers.length > 0) renderUsers();
             renderLiveConnections();
 
             showNotification(`✅ "${tokenId.substring(0,10)}…" GB Reset ပြီးပါပြီ`, "success");
             console.log(`resetGbUsage: sc=${s1}, log=${s2}, sdu=deleted`);
-
-            // ── App ဘက် memory ထဲ bytes ဟောင်း မပြန်ဝင်အောင် 3s နောက် Supabase ကနေ re-verify ──
-            // (App က 60s heartbeat နဲ့ old bytes ပြန်ရေးနိုင်သောကြောင့် confirm ပြန်ဆွဲသည်)
-            setTimeout(async () => {
-                try {
-                    // Force used_bytes=0 PATCH ထပ်ပြု (app heartbeat ၏ ပြန်ရေးမှုကို overwrite)
-                    await fetch(`${SB_URL}/rest/v1/server_connections?token_id=eq.${encodeURIComponent(tokenId)}`, {
-                        method: "PATCH",
-                        headers: {
-                            "apikey": SB_KEY,
-                            "Authorization": "Bearer " + SB_KEY,
-                            "Content-Type": "application/json",
-                            "Prefer": "return=minimal"
-                        },
-                        body: JSON.stringify({ used_bytes: 0 })
-                    });
-                    // Re-fetch from Supabase to verify and update UI with real server value
-                    await loadLiveConnections();
-                    console.log("resetGbUsage: re-verified used_bytes=0 after 3s");
-                } catch(e) { console.warn("resetGbUsage re-verify failed", e); }
-            }, 3000);
         }
         window.resetGbUsage = resetGbUsage;
     </script>
