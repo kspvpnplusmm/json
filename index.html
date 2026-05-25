@@ -2238,7 +2238,7 @@
         /* Column header row */
         .live-panel-col-header {
             display: grid;
-            grid-template-columns: 2fr 1.5fr 1.5fr 70px;
+            grid-template-columns: 1.8fr 1.4fr 1.4fr 1.2fr 70px;
             gap: 6px;
             padding: 6px 14px;
             background: #1e293b;
@@ -2264,7 +2264,7 @@
         /* Each row — single line */
         .live-panel-row {
             display: grid;
-            grid-template-columns: 2fr 1.5fr 1.5fr 70px;
+            grid-template-columns: 1.8fr 1.4fr 1.4fr 1.2fr 70px;
             gap: 6px;
             align-items: center;
             padding: 9px 14px;
@@ -2605,8 +2605,8 @@
                 
                 <div class="form-body">
                     <div class="form-group-small">
-                        <label for="token">ID *</label>
-                        <input type="text" id="token" class="form-input-small" placeholder="Enter ID">
+                        <label for="token">Admin Token ID *</label>
+                        <input type="text" id="token" class="form-input-small" placeholder="Enter Admin Token ID (e.g. abc123xyz)">
                     </div>
                     
                     <div class="form-group-small">
@@ -2620,8 +2620,8 @@
                     </div>
                     
                     <div class="form-group-small">
-                        <label for="gbLimit">GB Limit <span style="color:#94a3b8;font-weight:400;font-size:12px;">(0 = unlimited)</span></label>
-                        <input type="number" id="gbLimit" class="form-input-small" placeholder="e.g. 100" min="0" step="0.5" value="0">
+                        <label for="gbLimit">GB Limit <span style="color:#94a3b8;font-weight:400;font-size:12px;">(ထည့်မထားရင် Unlimited ဖြစ်မည်)</span></label>
+                        <input type="number" id="gbLimit" class="form-input-small" placeholder="e.g. 50 → 0 ဆိုရင် Unlimited" min="0" step="0.5" value="0">
                     </div>
                     
                     <div class="form-group-small">
@@ -2743,6 +2743,7 @@
                         <div class="live-dot-big"></div>
                         Live Connections
                         <span class="live-panel-count-badge" id="livePanelOnlineBadge">0 Online</span>
+                        <span class="live-panel-count-badge" style="background:#334155;color:#94a3b8;margin-left:4px;" id="livePanelTotalBadge">0 Total</span>
                     </div>
                     <div style="display:flex;align-items:center;gap:8px;">
                         <button class="btn-live-panel-refresh" onclick="refreshLivePanel()">
@@ -2758,6 +2759,7 @@
                     <span>Server</span>
                     <span>Username</span>
                     <span>Token ID</span>
+                    <span style="text-align:center;">GB Used</span>
                     <span style="text-align:center;">Status</span>
                 </div>
             </div>
@@ -3514,20 +3516,27 @@
         function isActuallyOnline(c) {
             if (!c.connected_at) return false;
 
-            // ── 1. Heartbeat check (ပိုတိကျသည်) ──────────────────────────────
-            if (c.last_heartbeat) {
+            // ── 0. Admin ကနေ force-offline လုပ်ထားရင် ချက်ချင်း Offline ──────────
+            // Supabase မှ is_online=false patch ရောက်ရင် heartbeat မဲ့ပါ offline
+            if (c.is_online === false && !c.last_heartbeat) return false;
+
+            // ── 1. Heartbeat check ─────────────────────────────────────────────
+            // Android က onConnect မှာ heartbeat set, onDisconnect မှာ NULL clear
+            // last_heartbeat = NULL  → VPN ပြုတ်ပြီ → Offline
+            // last_heartbeat = value → VPN ချိတ်နေဆဲ → Online (60s refresh)
+            if (c.last_heartbeat !== null && c.last_heartbeat !== undefined) {
+                // ထပ်ဆောင်း safety: 90s မကျော်ရ (1 missed beat tolerance)
                 const hbAge = Date.now() - new Date(c.last_heartbeat).getTime();
-                // 3 မိနစ်အတွင်း heartbeat ရှိလျှင် Online; ကျော်လျှင် Offline
-                return hbAge < 3 * 60 * 1000;
+                return hbAge < 90 * 1000;
             }
 
-            // ── 2. Fallback: timestamp logic (heartbeat မပါသည့် ဟောင်း rows) ──
+            // ── 2. Fallback: disconnected_at vs connected_at timestamp ──────────
             const connMs = new Date(c.connected_at).getTime();
             if (c.disconnected_at) {
                 const discMs = new Date(c.disconnected_at).getTime();
-                if (discMs > connMs) return false; // disconnect ဖြစ်ပြီ
+                if (discMs > connMs) return false;
             }
-            // heartbeat မပါ row — 5 မိနစ်ပဲ ယုံမည် (was 24h)
+            // heartbeat မပါ ဟောင်း row — 5 မိနစ်သာ ယုံမည်
             return (Date.now() - connMs) <= 5 * 60 * 1000;
         }
 
@@ -3828,11 +3837,11 @@
         // Delete user by token (for button click)
         function deleteUserByToken(token) {
             if (!token) {
-                showNotification("Please select a user to delete", "error");
+                showNotification("User မရွေးရသေးပါ", "error");
                 return;
             }
             
-            if (!confirm(`Are you sure you want to delete user "${token}"?`)) {
+            if (!confirm(`"${token}" ကို ဖျက်မည်လား?\n⚠️ ဖျက်လိုက်ရင် VPN ချက်ချင်း ပြုတ်သွားမည်`)) {
                 return;
             }
             
@@ -3842,9 +3851,23 @@
                 return;
             }
             
+            // 1) Firebase မှ ဖျက်
             db.collection("users").doc(token).delete()
-                .then(() => {
-                    showNotification("🗑️ User deleted successfully", "success");
+                .then(async () => {
+                    // 2) Supabase server_connections → is_online=false (force VPN disconnect)
+                    try {
+                        await fetch(`${SB_URL}/rest/v1/server_connections?token_id=eq.${encodeURIComponent(token)}`, {
+                            method: 'PATCH',
+                            headers: {
+                                'apikey': SB_KEY,
+                                'Authorization': 'Bearer ' + SB_KEY,
+                                'Content-Type': 'application/json',
+                                'Prefer': 'return=minimal'
+                            },
+                            body: JSON.stringify({ is_online: false, disconnected_at: new Date().toISOString() })
+                        });
+                    } catch(e) { console.warn('Supabase force-offline skipped', e); }
+                    showNotification(`🗑️ "${token}" ဖျက်ပြီး VPN ပြုတ်ရန် signal ပေးပြီ`, "success");
                 })
                 .catch(error => {
                     showNotification("❌ Error deleting user: " + error.message, "error");
@@ -3859,20 +3882,24 @@
             const isActive = isActiveInput.checked;
             
             if (!token) {
-                showNotification("ID is required", "error");
+                showNotification("⚠️ Admin Token ID လိုအပ်ပါသည်", "error");
                 return;
             }
+            
+            const gbVal = parseFloat(gbLimitInput.value) || 0;
+            const gbLabel = gbVal > 0 ? gbVal + ' GB' : 'Unlimited';
             
             const user = {
                 username: username || token,
                 expiryDate: expiryDate,
                 isActive: isActive,
-                gb_limit: parseFloat(gbLimitInput.value) || 0
+                gb_limit: gbVal   // 0 = unlimited
             };
             
             db.collection("users").doc(token).set(user)
                 .then(() => {
                     closeForm();
+                    showNotification(`✅ VIP User (${username || token}) ထည့်ပြီးပါပြီ — GB: ${gbLabel}`, "success");
                     showSuccessMessage({
                         token: token,
                         username: username || token,
@@ -3889,22 +3916,46 @@
             const token = currentEditToken || tokenInput.value.trim();
             
             if (!token) {
-                showNotification("Please select a user to update", "error");
+                showNotification("User မရွေးရသေးပါ", "error");
                 return;
             }
+            
+            const gbVal    = parseFloat(gbLimitInput.value) || 0;
+            const gbLabel  = gbVal > 0 ? gbVal + ' GB' : 'Unlimited';
+            const isActive = isActiveInput.checked;
             
             const user = {
                 username: formUsernameInput.value.trim(),
                 expiryDate: expiryInput.value,
-                isActive: isActiveInput.checked,
-                gb_limit: parseFloat(gbLimitInput.value) || 0
+                isActive: isActive,
+                gb_limit: gbVal
             };
             
             db.collection("users").doc(token).set(user, { merge: true })
-                .then(() => {
-                    showNotification("✅ User updated successfully", "success");
+                .then(async () => {
+                    // Supabase: gb_limit_gb update + isActive=false ဆိုရင် force offline
+                    try {
+                        const sbPatchBody = { gb_limit_gb: gbVal };
+                        if (!isActive) {
+                            // အသုံးပြုခွင့် ပိတ်ရင် → is_online=false → App မှာ auto VPN ပြုတ်မည်
+                            sbPatchBody.is_online        = false;
+                            sbPatchBody.disconnected_at  = new Date().toISOString();
+                        }
+                        await fetch(`${SB_URL}/rest/v1/server_connections?token_id=eq.${encodeURIComponent(token)}`, {
+                            method: 'PATCH',
+                            headers: {
+                                'apikey': SB_KEY,
+                                'Authorization': 'Bearer ' + SB_KEY,
+                                'Content-Type': 'application/json',
+                                'Prefer': 'return=minimal'
+                            },
+                            body: JSON.stringify(sbPatchBody)
+                        });
+                    } catch(e) { console.warn('Supabase update skipped', e); }
+                    
+                    const statusMsg = isActive ? '' : ' — ⚠️ VPN ပြုတ်ရန် signal ပေးပြီ';
+                    showNotification(`✅ Updated — GB: ${gbLabel}${statusMsg}`, "success");
                     closeForm();
-                    // Show slip for extend/update
                     showSuccessMessage({
                         token: token,
                         username: user.username || token,
@@ -3993,6 +4044,8 @@
 
             const onlineCount = liveConns.filter(c => c.is_online).length;
             if (badge) badge.textContent = onlineCount + ' Online';
+            const totalBadge = document.getElementById('livePanelTotalBadge');
+            if (totalBadge) totalBadge.textContent = liveConns.length + ' Total';
 
             list.innerHTML = liveConns.map(c => {
                 const cls        = c.is_online ? 'online' : 'offline';
@@ -4007,16 +4060,26 @@
                 const fbUser    = allUsers.find(u => u.token === c.token_id);
                 const limitGb   = (c.gb_limit_gb > 0) ? c.gb_limit_gb
                                 : (fbUser && fbUser.gb_limit > 0) ? fbUser.gb_limit : 0;
-                const gbStr     = limitGb > 0
-                    ? `${fmtBytes(liveBytes)} / ${limitGb}GB`
-                    : fmtBytes(liveBytes);
+                const limitBytes = limitGb * 1073741824;
+                const pct        = limitGb > 0 ? Math.min(Math.round(liveBytes / limitBytes * 100), 100) : 0;
+                const gbColor    = pct >= 100 ? '#ef4444' : pct >= 80 ? '#f59e0b' : '#22c55e';
+                const gbIcon     = pct >= 100 ? ' ⛔' : pct >= 80 ? ' ⚠️' : '';
+                const gbStr      = limitGb > 0
+                    ? `${fmtBytes(liveBytes)} / ${limitGb}GB (${pct}%)${gbIcon}`
+                    : `${fmtBytes(liveBytes)} / ∞`;
+                const gbBarHtml  = limitGb > 0 ? `
+                    <div style="height:3px;background:#1e293b;border-radius:2px;margin-top:3px;overflow:hidden;">
+                        <div style="height:100%;width:${pct}%;background:${gbColor};border-radius:2px;transition:width .4s;"></div>
+                    </div>` : '';
 
                 return `
                 <div class="live-panel-row ${rowCls}">
                     <div class="live-panel-cell cell-server" title="${server}">${server}</div>
                     <div class="live-panel-cell cell-user"   title="${username}">${username}</div>
                     <div class="live-panel-cell cell-token"  title="${c.token_id || ''}">${tokenShort}</div>
-                    <div class="live-panel-cell" style="font-size:10px;font-weight:700;color:${c.is_online?'#22c55e':'#94a3b8'};" title="${gbStr}">${gbStr}</div>
+                    <div class="live-panel-cell" style="font-size:10px;font-weight:700;color:${gbColor};" title="${gbStr}">
+                        ${gbStr}${gbBarHtml}
+                    </div>
                     <div class="live-panel-status">
                         <div class="live-panel-status-dot ${cls}"></div>
                         <span class="live-panel-status-text ${cls}">${statusText}</span>
