@@ -3516,21 +3516,22 @@
         function isActuallyOnline(c) {
             if (!c.connected_at) return false;
 
-            // ── 0. Admin ကနေ force-offline လုပ်ထားရင် ချက်ချင်း Offline ──────────
-            // Supabase မှ is_online=false patch ရောက်ရင် heartbeat မဲ့ပါ offline
+            // ── 0. Admin force-offline: is_online=false AND heartbeat null → Offline ──
             if (c.is_online === false && !c.last_heartbeat) return false;
 
             // ── 1. Heartbeat check ─────────────────────────────────────────────
-            // Android က onConnect မှာ heartbeat set, onDisconnect မှာ NULL clear
+            // Android က 60s တစ်ကြိမ် heartbeat update လုပ်သည်
+            // disconnect ဖြစ်ရင် → last_heartbeat = NULL (ချက်ချင်း Offline)
             // last_heartbeat = NULL  → VPN ပြုတ်ပြီ → Offline
-            // last_heartbeat = value → VPN ချိတ်နေဆဲ → Online (60s refresh)
+            // last_heartbeat = value → 65s အတွင်း = Online, ကျော်ရင် Offline
             if (c.last_heartbeat !== null && c.last_heartbeat !== undefined) {
-                // ထပ်ဆောင်း safety: 90s မကျော်ရ (1 missed beat tolerance)
                 const hbAge = Date.now() - new Date(c.last_heartbeat).getTime();
-                return hbAge < 90 * 1000;
+                // 35s = 30s beat interval + 5s network tolerance
+                // ဒီ threshold ကျော်ရင် beat တစ်ခု miss ပြီ = VPN မချိတ်တော့
+                return hbAge < 35 * 1000;
             }
 
-            // ── 2. Fallback: disconnected_at vs connected_at timestamp ──────────
+            // ── 2. Fallback: disconnected_at vs connected_at (heartbeat မပါ ဟောင်း row) ──
             const connMs = new Date(c.connected_at).getTime();
             if (c.disconnected_at) {
                 const discMs = new Date(c.disconnected_at).getTime();
@@ -3564,6 +3565,24 @@
                 // Override is_online with timestamp logic
                 liveConns = (connRows || []).map(c => ({ ...c, is_online: isActuallyOnline(c) }));
                 serverDataUsage = sduRows || [];
+
+                // ── Stale heartbeat cleanup ──────────────────────────────────
+                // App kill/phone restart မှာ heartbeat ဟောင်း ကျန်ရစ်နိုင်သည်
+                // Refresh နှိပ်တိုင်း → Offline ဖြစ်သော row ၏ last_heartbeat ကို NULL clear
+                // → နောက်ကြိမ် Refresh မှာ Offline သေချာပြမည်
+                const staleRows = liveConns.filter(c =>
+                    !c.is_online && c.last_heartbeat !== null && c.last_heartbeat !== undefined
+                );
+                if (staleRows.length > 0) {
+                    staleRows.forEach(c => {
+                        safePatch(
+                            "server_connections",
+                            `token_id=eq.${encodeURIComponent(c.token_id)}`,
+                            { is_online: false, last_heartbeat: null, disconnected_at: new Date().toISOString() }
+                        );
+                    });
+                    console.log(`Cleaned ${staleRows.length} stale heartbeat(s)`);
+                }
 
                 // Sync live used_bytes into usedBytesMap
                 liveConns.forEach(c => {
