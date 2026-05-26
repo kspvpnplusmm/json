@@ -3526,9 +3526,9 @@
             // last_heartbeat = value → 65s အတွင်း = Online, ကျော်ရင် Offline
             if (c.last_heartbeat !== null && c.last_heartbeat !== undefined) {
                 const hbAge = Date.now() - new Date(c.last_heartbeat).getTime();
-                // 35s = 30s beat interval + 5s network tolerance
-                // ဒီ threshold ကျော်ရင် beat တစ်ခု miss ပြီ = VPN မချိတ်တော့
-                return hbAge < 90 * 1000;  // 90s threshold (heartbeat interval 60s × 1.5)
+                // App က 60s တစ်ကြိမ် heartbeat update လုပ်သည်
+                // 90s = 60s beat interval + 30s network/process tolerance
+                return hbAge < 90 * 1000;
             }
 
             // ── 2. Fallback: disconnected_at vs connected_at (heartbeat မပါ ဟောင်း row) ──
