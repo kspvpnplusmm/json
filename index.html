@@ -3531,9 +3531,9 @@
             // last_heartbeat = value → 65s အတွင်း = Online, ကျော်ရင် Offline
             if (c.last_heartbeat !== null && c.last_heartbeat !== undefined) {
                 const hbAge = Date.now() - new Date(c.last_heartbeat).getTime();
-                // 35s = 30s beat interval + 5s network tolerance
-                // ဒီ threshold ကျော်ရင် beat တစ်ခု miss ပြီ = VPN မချိတ်တော့
-                return hbAge < 35 * 1000;
+                // 90s = 60s beat interval + 30s network/server tolerance
+                // App က 60s တစ်ကြိမ် beat လုပ်တယ် → 90s အတွင်း beat မရရင် Offline
+                return hbAge < 90 * 1000;
             }
 
             // ── 2. Fallback: disconnected_at vs connected_at (heartbeat မပါ ဟောင်း row) ──
@@ -3546,7 +3546,25 @@
             return (Date.now() - connMs) <= 5 * 60 * 1000;
         }
 
-                // Auto-refresh live connections every 60s
+        // ── Global safePatch helper ───────────────────────────────────────────
+        // loadLiveConnections, resetGbUsage နှစ်ခုစလုံးကနေ သုံးနိုင်ရန် global scope မှာ ထားသည်
+        async function safePatch(table, filter, body) {
+            try {
+                const r = await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
+                    method: "PATCH",
+                    headers: {
+                        "apikey": SB_KEY,
+                        "Authorization": "Bearer " + SB_KEY,
+                        "Content-Type": "application/json",
+                        "Prefer": "return=minimal"
+                    },
+                    body: JSON.stringify(body)
+                });
+                return r.status;
+            } catch(e) { return 0; }
+        }
+
+        // Auto-refresh live connections every 60s
         let _liveAutoRefreshTimer = null;
         function startLiveAutoRefresh() {
             if (_liveAutoRefreshTimer) clearInterval(_liveAutoRefreshTimer);
@@ -3705,7 +3723,7 @@
                             <i class="fas fa-key"></i><span title="${c.token_id || ''}">${c.token_id ? c.token_id.substring(0,14)+'…' : '—'}</span>
                         </div>
                         <div class="live-conn-detail">
-                            <i class="fas fa-server"></i><span>${c.server_name || '—'}</span>
+                            <i class="fas fa-server"></i><span>${c.server_name || (c.server_key ? c.server_key.substring(0,12)+'…' : '—')}</span>
                         </div>
                         <div class="live-conn-detail">
                             <i class="fas fa-clock"></i><span>${fmtTime(c.connected_at)}</span>
@@ -3726,7 +3744,8 @@
                             <div style="text-align:right;font-size:9px;font-weight:700;color:${gbPctColor};margin-top:1px;">${pct}%  ${pct >= 100 ? '⛔ LIMIT REACHED' : pct >= 80 ? '⚠️ Almost full' : ''}</div>
                         </div>` : ''}
                         ${breakdownHtml}
-                        <div style="grid-column:1/-1;text-align:right;margin-top:4px;">
+                        <div style="grid-column:1/-1;text-align:right;margin-top:4px;display:flex;gap:6px;justify-content:flex-end;">
+                            <button onclick="clearServerName('${c.token_id}')" style="font-size:10px;background:#fef3c7;color:#92400e;border:none;border-radius:6px;padding:3px 10px;cursor:pointer;font-weight:600;" title="Server name ဟောင်း ရှင်းမည်">🔧 Fix Server</button>
                             <button onclick="resetGbUsage('${c.token_id}')" style="font-size:10px;background:#fee2e2;color:#dc2626;border:none;border-radius:6px;padding:3px 10px;cursor:pointer;font-weight:600;">↺ Reset GB</button>
                         </div>
                     </div>
@@ -4076,7 +4095,7 @@
                 const rowCls     = c.is_online ? 'row-online' : 'row-offline';
                 const statusText = c.is_online ? '🟢 Online' : '⚪ Offline';
                 const tokenShort = c.token_id ? c.token_id.substring(0, 14) : '—';
-                const server     = c.server_name || '—';
+                const server     = c.server_name || (c.server_key ? c.server_key.substring(0,12)+'…' : '—');
                 const username   = c.username    || c.token_id || '—';
 
                 // GB info for panel row
@@ -4121,23 +4140,6 @@
             if (!confirm(`"${tokenId}" ၏ GB Usage ကို 0 သို့ Reset မလုပ်မချင်း OK နှိပ်ပါ`)) return;
 
             showNotification("⏳ GB Resetting...", "info");
-
-            // ── helper: silent PATCH (ignores all HTTP errors) ──
-            async function safePatch(table, filter, body) {
-                try {
-                    const r = await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
-                        method: "PATCH",
-                        headers: {
-                            "apikey": SB_KEY,
-                            "Authorization": "Bearer " + SB_KEY,
-                            "Content-Type": "application/json",
-                            "Prefer": "return=minimal"
-                        },
-                        body: JSON.stringify(body)
-                    });
-                    return r.status; // 204 = ok, anything else = ignored
-                } catch(e) { return 0; }
-            }
 
             // ── helper: silent POST/upsert ──
             async function safeUpsert(table, body) {
@@ -4195,6 +4197,41 @@
             console.log(`resetGbUsage: sc=${s1}, log=${s2}, sdu=deleted`);
         }
         window.resetGbUsage = resetGbUsage;
+
+        // ── Clear Server Name (per token) ──────────────────────────────────────
+        // User တစ်ဦးချင်းစီအတွက် server_name ဟောင်း ရှင်းပေးသည်
+        // App reconnect လုပ်တဲ့အခါ server_name အသစ် ရေးလိမ့်မည်
+        async function clearServerName(tokenId) {
+            if (!tokenId) return;
+            if (!confirm(`Token "${tokenId.substring(0,14)}…" ၏ server_name ကို clear လုပ်မည်။\nApp reconnect လုပ်မှ server name အမှန် ပြပြန်မည်။\nဆက်လုပ်မလား?`)) return;
+
+            showNotification("⏳ Server name clearing...", "info");
+            try {
+                const r = await fetch(`${SB_URL}/rest/v1/server_connections?token_id=eq.${encodeURIComponent(tokenId)}`, {
+                    method: "PATCH",
+                    headers: {
+                        "apikey": SB_KEY,
+                        "Authorization": "Bearer " + SB_KEY,
+                        "Content-Type": "application/json",
+                        "Prefer": "return=minimal"
+                    },
+                    body: JSON.stringify({ server_name: null })
+                });
+                if (r.ok || r.status === 204) {
+                    // Update local cache
+                    const conn = liveConns.find(c => c.token_id === tokenId);
+                    if (conn) conn.server_name = null;
+                    renderLiveConnections();
+                    renderLivePanelRows();
+                    showNotification(`✅ Server name cleared — App reconnect လုပ်ပါ`, "success");
+                } else {
+                    showNotification(`❌ Failed (HTTP ${r.status})`, "error");
+                }
+            } catch(e) {
+                showNotification("❌ Error: " + e.message, "error");
+            }
+        }
+        window.clearServerName = clearServerName;
 
         // ── Fix Stale Server Names ────────────────────────────────────────────
         // Server update ပြီးနောက် Supabase server_connections table မှာ
