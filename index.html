@@ -2574,9 +2574,14 @@
                             Real-time Connections
                             <span class="live-online-badge" id="liveOnlineCount">0 Online</span>
                         </div>
+                        <div style="display:flex;gap:6px;align-items:center;">
+                        <button class="btn-live-refresh" style="background:#f59e0b;font-size:11px;padding:6px 10px;" onclick="fixStaleServerNames()" title="Server update ပြီးနောက် server_name ဟောင်းတွေ ရှင်းပေးသည်">
+                            <i class="fas fa-wrench" id="fixNamesIcon"></i> Fix Names
+                        </button>
                         <button class="btn-live-refresh" onclick="loadLiveConnections()">
                             <i class="fas fa-sync-alt" id="refreshIcon"></i> Refresh
                         </button>
+                        </div>
                     </div>
                     <div class="live-conn-list" id="liveConnList">
                         <div class="live-loading">
@@ -4190,6 +4195,67 @@
             console.log(`resetGbUsage: sc=${s1}, log=${s2}, sdu=deleted`);
         }
         window.resetGbUsage = resetGbUsage;
+
+        // ── Fix Stale Server Names ────────────────────────────────────────────
+        // Server update ပြီးနောက် Supabase server_connections table မှာ
+        // server_name ဟောင်းတွေ ကျန်ရှိနေတာကို ရှင်းလင်းပေးသည်။
+        // Online connections တွေရဲ့ server_name ကို NULL clear လုပ်ပေးပြီး
+        // App က reconnect တဲ့အခါ server_name အသစ် ရေးလိမ့်မည်။
+        async function fixStaleServerNames() {
+            const icon = document.getElementById('fixNamesIcon');
+            if (icon) icon.style.animation = 'spin 1s linear infinite';
+
+            try {
+                // Fetch all current rows
+                const rows = await sbFetch("server_connections?select=token_id,server_name,is_online&limit=500");
+                if (!rows || rows.length === 0) {
+                    showNotification("⚠️ Connection data မရှိပါ", "warning");
+                    return;
+                }
+
+                // Find rows that have a server_name (stale name ဖြစ်နိုင်သည်)
+                const toFix = rows.filter(r => r.server_name);
+                if (toFix.length === 0) {
+                    showNotification("✅ Server names အားလုံး clean ဖြစ်ပြီးပါပြီ", "success");
+                    return;
+                }
+
+                // Confirm
+                if (!confirm(`Server_name ကို clear လုပ်မည် (${toFix.length} rows)။\nApp ကို reconnect လုပ်တဲ့အခါ server name အသစ် ရေးလိမ့်မည်။\nဆက်လုပ်မလား?`)) return;
+
+                showNotification(`⏳ ${toFix.length} rows fixing...`, "info");
+
+                // Clear server_name for all rows (batch by chunks of 50)
+                let fixed = 0;
+                for (const row of toFix) {
+                    try {
+                        await fetch(`${SB_URL}/rest/v1/server_connections?token_id=eq.${encodeURIComponent(row.token_id)}`, {
+                            method: "PATCH",
+                            headers: {
+                                "apikey": SB_KEY,
+                                "Authorization": "Bearer " + SB_KEY,
+                                "Content-Type": "application/json",
+                                "Prefer": "return=minimal"
+                            },
+                            body: JSON.stringify({ server_name: null })
+                        });
+                        fixed++;
+                    } catch(e) { console.warn("patch failed for", row.token_id, e); }
+                }
+
+                showNotification(`✅ ${fixed} rows fix ပြီးပါပြီ — App reconnect လုပ်ပါ`, "success");
+
+                // Reload live connections
+                await loadLiveConnections();
+
+            } catch(e) {
+                console.error("fixStaleServerNames error", e);
+                showNotification("❌ Fix မအောင်မြင်ပါ: " + e.message, "error");
+            } finally {
+                if (icon) icon.style.animation = '';
+            }
+        }
+        window.fixStaleServerNames = fixStaleServerNames;
     </script>
 </body>
 </html>
