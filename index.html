@@ -3512,7 +3512,7 @@
         // connected_at vs disconnected_at timestamp ကနေ မှန်ကန်စွာ ဆုံးဖြတ်မည်
         // ── Online/Offline detection (heartbeat-based) ──────────────────────
         // App က 60s တစ်ကြိမ် last_heartbeat update လုပ်မည်။
-        // heartbeat ရပ်သွားရင် (VPN ဖြတ်/app kill/uninstall) 90s အတွင်း Offline ပြမည်။
+        // heartbeat ရပ်သွားရင် (VPN ဖြတ်/app kill/uninstall) 3 မိနစ်အတွင်း Offline ပြမည်။
         function isActuallyOnline(c) {
             if (!c.connected_at) return false;
 
@@ -3523,13 +3523,12 @@
             // Android က 60s တစ်ကြိမ် heartbeat update လုပ်သည်
             // disconnect ဖြစ်ရင် → last_heartbeat = NULL (ချက်ချင်း Offline)
             // last_heartbeat = NULL  → VPN ပြုတ်ပြီ → Offline
-            // last_heartbeat = value → 90s အတွင်း = Online, ကျော်ရင် Offline
+            // last_heartbeat = value → 65s အတွင်း = Online, ကျော်ရင် Offline
             if (c.last_heartbeat !== null && c.last_heartbeat !== undefined) {
                 const hbAge = Date.now() - new Date(c.last_heartbeat).getTime();
-                // App က 60s တစ်ကြိမ် heartbeat update လုပ်သည်
-                // 90s = 60s beat interval + 30s network/server lag tolerance
-                // ဒီ threshold ကျော်ရင်မှ Offline သတ်မှတ်မည် (beat တစ်ကြိမ် miss ခွင့်ပြု)
-                return hbAge < 90 * 1000;
+                // 35s = 30s beat interval + 5s network tolerance
+                // ဒီ threshold ကျော်ရင် beat တစ်ခု miss ပြီ = VPN မချိတ်တော့
+                return hbAge < 35 * 1000;
             }
 
             // ── 2. Fallback: disconnected_at vs connected_at (heartbeat မပါ ဟောင်း row) ──
