@@ -2432,7 +2432,7 @@
             </div>
             
             <div style="color: #64748b; font-size: 12px; margin-top: 20px;">
-                <i class="fas fa-info-circle"></i> Default: JueHtet / 171991
+                <i class="fas fa-info-circle"></i> Default: AGEVPN / 1234567
             </div>
         </div>
     </div>
@@ -2800,7 +2800,42 @@
             });
             return r.ok ? r.json() : [];
         }
-        
+
+        // ── Global helpers (scope: window) ─────────────────────────────
+        // Bug Fix: safePatch/safeUpsert ကို global scope တွင် ထည့်ထားသည်
+        // loadLiveConnections() + resetGbUsage() နှစ်ခုလုံး သုံးနိုင်ရန်
+        async function safePatch(table, filter, body) {
+            try {
+                const r = await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
+                    method: "PATCH",
+                    headers: {
+                        "apikey": SB_KEY,
+                        "Authorization": "Bearer " + SB_KEY,
+                        "Content-Type": "application/json",
+                        "Prefer": "return=minimal"
+                    },
+                    body: JSON.stringify(body)
+                });
+                return r.status;
+            } catch(e) { return 0; }
+        }
+
+        async function safeUpsert(table, body) {
+            try {
+                const r = await fetch(`${SB_URL}/rest/v1/${table}`, {
+                    method: "POST",
+                    headers: {
+                        "apikey": SB_KEY,
+                        "Authorization": "Bearer " + SB_KEY,
+                        "Content-Type": "application/json",
+                        "Prefer": "resolution=merge-duplicates,return=minimal"
+                    },
+                    body: JSON.stringify(body)
+                });
+                return r.status;
+            } catch(e) { return 0; }
+        }
+
         // Global variables
         let allUsers = [];
         let filteredUsers = [];
@@ -3126,11 +3161,12 @@
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
             
             if (diffDays < 0) {
-                return { days: 0, text: "Expired" };
+                return { days: 0, text: "Expired", color: "red" };
             } else if (diffDays === 0) {
-                return { days: 0, text: "Today" };
+                return { days: 0, text: "Today", color: "red" };
             } else {
-                return { days: diffDays, text: `${diffDays} days` };
+                const color = diffDays <= 5 ? "red" : diffDays <= 10 ? "yellow" : "green";
+                return { days: diffDays, text: `${diffDays} days`, color: color };
             }
         }
 
@@ -3276,6 +3312,23 @@
                                 <button class="btn-action btn-delete" onclick="deleteUserByToken('${user.token}')">
                                     <i class="fas fa-trash"></i>
                                 </button>
+                            </div>
+                        </div>
+                        <div class="user-details-small">
+                            <div class="detail-row">
+                                <i class="fas fa-key"></i>
+                                <span class="detail-label">Token ID:</span>
+                                <span class="detail-value">${user.token}</span>
+                            </div>
+                            <div class="detail-row">
+                                <i class="fas fa-user"></i>
+                                <span class="detail-label">Username:</span>
+                                <span class="detail-value">${user.username}</span>
+                            </div>
+                            <div class="detail-row">
+                                <i class="fas fa-calendar-alt"></i>
+                                <span class="detail-label">Expiry:</span>
+                                <span class="detail-value">${user.expiryDate || 'No date'}</span>
                             </div>
                             <div class="detail-row">
                                 <i class="fas fa-clock"></i>
@@ -3528,8 +3581,7 @@
                 const hbAge = Date.now() - new Date(c.last_heartbeat).getTime();
                 // App က 60s တစ်ကြိမ် heartbeat update လုပ်သည်
                 // 90s = 60s beat interval + 30s network/process tolerance
-                // ★ FIX: App now heartbeats every 30s. Allow 75s (30s + 45s buffer).
-                return hbAge < 75 * 1000;
+                return hbAge < 90 * 1000;
             }
 
             // ── 2. Fallback: disconnected_at vs connected_at (heartbeat မပါ ဟောင်း row) ──
@@ -4112,75 +4164,52 @@
         window.refreshLivePanel = refreshLivePanel;
 
         // ── GB Reset ─────────────────────────────────────────────────────────
-        // ★ FIX: GB reset ဆိုသည်မှာ Tables 3 ခုလုံး 0 reset + gb_reset_at timestamp ထည့်
-        // Android app က 30s heartbeat တိုင်း gb_reset_at စစ်ပြီး resetGbBlock() ခေါ်မည်
         async function resetGbUsage(tokenId) {
             if (!tokenId) return;
             if (!confirm(`"${tokenId}" ၏ GB Usage ကို 0 သို့ Reset မလုပ်မချင်း OK နှိပ်ပါ`)) return;
 
             showNotification("⏳ GB Resetting...", "info");
+            // safePatch / safeUpsert — global scope မှ သုံးသည် (duplicate removed)
+            const enc = encodeURIComponent(tokenId);
 
-            const sbHeaders = {
-                "apikey": SB_KEY,
-                "Authorization": "Bearer " + SB_KEY,
-                "Content-Type": "application/json",
-                "Prefer": "return=minimal"
-            };
-
-            async function safePatch(table, filter, body) {
-                try {
-                    const r = await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
-                        method: "PATCH", headers: sbHeaders, body: JSON.stringify(body)
-                    });
-                    return r.status;
-                } catch(e) { return 0; }
-            }
-
-            async function safeUpsert(table, body) {
-                try {
-                    const r = await fetch(`${SB_URL}/rest/v1/${table}`, {
-                        method: "POST",
-                        headers: { ...sbHeaders, "Prefer": "resolution=merge-duplicates,return=minimal" },
-                        body: JSON.stringify(body)
-                    });
-                    return r.status;
-                } catch(e) { return 0; }
-            }
-
-            const enc     = encodeURIComponent(tokenId);
-            const nowIso  = new Date().toISOString();
-
-            // 1) server_connections → used_bytes=0 + gb_reset_at (app က ဖတ်ပြီး block clear မည်)
+            // 1) server_connections  →  used_bytes = 0
             const s1 = await safePatch("server_connections",
-                `token_id=eq.${enc}`, { used_bytes: 0, gb_reset_at: nowIso });
+                `token_id=eq.${enc}`, { used_bytes: 0 });
 
-            // 2) used_bytes_log → total_bytes=0
+            // 2) used_bytes_log  →  total_bytes = 0
             let s2 = await safePatch("used_bytes_log",
                 `token_id=eq.${enc}`, { total_bytes: 0 });
             if (s2 !== 204) {
-                s2 = await safeUpsert("used_bytes_log", { token_id: tokenId, total_bytes: 0 });
+                s2 = await safeUpsert("used_bytes_log",
+                    { token_id: tokenId, total_bytes: 0 });
             }
 
-            // 3) server_data_usage → DELETE (per-server breakdown ပြန်စစ်)
+            // 3) server_data_usage  →  DELETE all rows for this token (per-server reset)
             try {
                 await fetch(`${SB_URL}/rest/v1/server_data_usage?token_id=eq.${enc}`, {
-                    method: "DELETE", headers: sbHeaders
+                    method: "DELETE",
+                    headers: {
+                        "apikey": SB_KEY,
+                        "Authorization": "Bearer " + SB_KEY,
+                        "Prefer": "return=minimal"
+                    }
                 });
             } catch(e) { console.warn("server_data_usage delete failed", e); }
 
-            // Local cache update → UI ချက်ချင်း 0 ပြမည်
+            // Update local caches so UI shows 0 immediately
             usedBytesMap[tokenId] = 0;
             serverDataUsage = serverDataUsage.filter(r => r.token_id !== tokenId);
             const liveConn = liveConns.find(c => c.token_id === tokenId);
-            if (liveConn) { liveConn.used_bytes = 0; liveConn.gb_reset_at = nowIso; }
+            if (liveConn) liveConn.used_bytes = 0;
 
             if (allUsers.length > 0) renderUsers();
             renderLiveConnections();
 
-            showNotification(`✅ "${tokenId.substring(0,10)}…" GB Reset ပြီးပါပြီ — App မှာ နောက်ထပ် heartbeat တွင် block clear ဖြစ်မည်`, "success");
+            showNotification(`✅ "${tokenId.substring(0,10)}…" GB Reset ပြီးပါပြီ`, "success");
             console.log(`resetGbUsage: sc=${s1}, log=${s2}, sdu=deleted`);
         }
         window.resetGbUsage = resetGbUsage;
     </script>
+    </div><!-- /app-container -->
 </body>
 </html>
