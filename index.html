@@ -3528,7 +3528,8 @@
                 const hbAge = Date.now() - new Date(c.last_heartbeat).getTime();
                 // App က 60s တစ်ကြိမ် heartbeat update လုပ်သည်
                 // 90s = 60s beat interval + 30s network/process tolerance
-                return hbAge < 90 * 1000;
+                // ★ FIX: App now heartbeats every 30s. Allow 75s (30s + 45s buffer).
+                return hbAge < 75 * 1000;
             }
 
             // ── 2. Fallback: disconnected_at vs connected_at (heartbeat မပါ ဟောင်း row) ──
@@ -4111,82 +4112,72 @@
         window.refreshLivePanel = refreshLivePanel;
 
         // ── GB Reset ─────────────────────────────────────────────────────────
+        // ★ FIX: GB reset ဆိုသည်မှာ Tables 3 ခုလုံး 0 reset + gb_reset_at timestamp ထည့်
+        // Android app က 30s heartbeat တိုင်း gb_reset_at စစ်ပြီး resetGbBlock() ခေါ်မည်
         async function resetGbUsage(tokenId) {
             if (!tokenId) return;
             if (!confirm(`"${tokenId}" ၏ GB Usage ကို 0 သို့ Reset မလုပ်မချင်း OK နှိပ်ပါ`)) return;
 
             showNotification("⏳ GB Resetting...", "info");
 
-            // ── helper: silent PATCH (ignores all HTTP errors) ──
+            const sbHeaders = {
+                "apikey": SB_KEY,
+                "Authorization": "Bearer " + SB_KEY,
+                "Content-Type": "application/json",
+                "Prefer": "return=minimal"
+            };
+
             async function safePatch(table, filter, body) {
                 try {
                     const r = await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
-                        method: "PATCH",
-                        headers: {
-                            "apikey": SB_KEY,
-                            "Authorization": "Bearer " + SB_KEY,
-                            "Content-Type": "application/json",
-                            "Prefer": "return=minimal"
-                        },
-                        body: JSON.stringify(body)
+                        method: "PATCH", headers: sbHeaders, body: JSON.stringify(body)
                     });
-                    return r.status; // 204 = ok, anything else = ignored
+                    return r.status;
                 } catch(e) { return 0; }
             }
 
-            // ── helper: silent POST/upsert ──
             async function safeUpsert(table, body) {
                 try {
                     const r = await fetch(`${SB_URL}/rest/v1/${table}`, {
                         method: "POST",
-                        headers: {
-                            "apikey": SB_KEY,
-                            "Authorization": "Bearer " + SB_KEY,
-                            "Content-Type": "application/json",
-                            "Prefer": "resolution=merge-duplicates,return=minimal"
-                        },
+                        headers: { ...sbHeaders, "Prefer": "resolution=merge-duplicates,return=minimal" },
                         body: JSON.stringify(body)
                     });
                     return r.status;
                 } catch(e) { return 0; }
             }
 
-            const enc = encodeURIComponent(tokenId);
+            const enc     = encodeURIComponent(tokenId);
+            const nowIso  = new Date().toISOString();
 
-            // 1) server_connections  →  used_bytes = 0
+            // 1) server_connections → used_bytes=0 + gb_reset_at (app က ဖတ်ပြီး block clear မည်)
             const s1 = await safePatch("server_connections",
-                `token_id=eq.${enc}`, { used_bytes: 0 });
+                `token_id=eq.${enc}`, { used_bytes: 0, gb_reset_at: nowIso });
 
-            // 2) used_bytes_log  →  total_bytes = 0
+            // 2) used_bytes_log → total_bytes=0
             let s2 = await safePatch("used_bytes_log",
                 `token_id=eq.${enc}`, { total_bytes: 0 });
             if (s2 !== 204) {
-                s2 = await safeUpsert("used_bytes_log",
-                    { token_id: tokenId, total_bytes: 0 });
+                s2 = await safeUpsert("used_bytes_log", { token_id: tokenId, total_bytes: 0 });
             }
 
-            // 3) server_data_usage  →  DELETE all rows for this token (per-server reset)
+            // 3) server_data_usage → DELETE (per-server breakdown ပြန်စစ်)
             try {
                 await fetch(`${SB_URL}/rest/v1/server_data_usage?token_id=eq.${enc}`, {
-                    method: "DELETE",
-                    headers: {
-                        "apikey": SB_KEY,
-                        "Authorization": "Bearer " + SB_KEY,
-                        "Prefer": "return=minimal"
-                    }
+                    method: "DELETE", headers: sbHeaders
                 });
             } catch(e) { console.warn("server_data_usage delete failed", e); }
 
-            // Update local caches so UI shows 0 immediately
+            // Local cache update → UI ချက်ချင်း 0 ပြမည်
             usedBytesMap[tokenId] = 0;
             serverDataUsage = serverDataUsage.filter(r => r.token_id !== tokenId);
             const liveConn = liveConns.find(c => c.token_id === tokenId);
-            if (liveConn) liveConn.used_bytes = 0;
+            if (liveConn) { liveConn.used_bytes = 0; liveConn.gb_reset_at = nowIso; }
 
             if (allUsers.length > 0) renderUsers();
             renderLiveConnections();
 
-            showNotification(`✅ "${tokenId.substring(0,10)}…" GB Reset ပြီးပါပြီ`, "success");
+            showNotification(`✅ "${tokenId.substring(0,10)}…" GB Reset ပြီးပါပြီ — App မှာ နောက်ထပ် heartbeat တွင် block clear ဖြစ်မည်`, "success");
             console.log(`resetGbUsage: sc=${s1}, log=${s2}, sdu=deleted`);
         }
         window.resetGbUsage = resetGbUsage;
