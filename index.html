@@ -2432,7 +2432,7 @@
             </div>
             
             <div style="color: #64748b; font-size: 12px; margin-top: 20px;">
-                <i class="fas fa-info-circle"></i> Default: AGEVPN / 1234567
+                <i class="fas fa-info-circle"></i> Default: JueHtet / 171991
             </div>
         </div>
     </div>
@@ -2800,42 +2800,7 @@
             });
             return r.ok ? r.json() : [];
         }
-
-        // ── Global helpers (scope: window) ─────────────────────────────
-        // Bug Fix: safePatch/safeUpsert ကို global scope တွင် ထည့်ထားသည်
-        // loadLiveConnections() + resetGbUsage() နှစ်ခုလုံး သုံးနိုင်ရန်
-        async function safePatch(table, filter, body) {
-            try {
-                const r = await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
-                    method: "PATCH",
-                    headers: {
-                        "apikey": SB_KEY,
-                        "Authorization": "Bearer " + SB_KEY,
-                        "Content-Type": "application/json",
-                        "Prefer": "return=minimal"
-                    },
-                    body: JSON.stringify(body)
-                });
-                return r.status;
-            } catch(e) { return 0; }
-        }
-
-        async function safeUpsert(table, body) {
-            try {
-                const r = await fetch(`${SB_URL}/rest/v1/${table}`, {
-                    method: "POST",
-                    headers: {
-                        "apikey": SB_KEY,
-                        "Authorization": "Bearer " + SB_KEY,
-                        "Content-Type": "application/json",
-                        "Prefer": "resolution=merge-duplicates,return=minimal"
-                    },
-                    body: JSON.stringify(body)
-                });
-                return r.status;
-            } catch(e) { return 0; }
-        }
-
+        
         // Global variables
         let allUsers = [];
         let filteredUsers = [];
@@ -3161,12 +3126,11 @@
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
             
             if (diffDays < 0) {
-                return { days: 0, text: "Expired", color: "red" };
+                return { days: 0, text: "Expired" };
             } else if (diffDays === 0) {
-                return { days: 0, text: "Today", color: "red" };
+                return { days: 0, text: "Today" };
             } else {
-                const color = diffDays <= 5 ? "red" : diffDays <= 10 ? "yellow" : "green";
-                return { days: diffDays, text: `${diffDays} days`, color: color };
+                return { days: diffDays, text: `${diffDays} days` };
             }
         }
 
@@ -3312,23 +3276,6 @@
                                 <button class="btn-action btn-delete" onclick="deleteUserByToken('${user.token}')">
                                     <i class="fas fa-trash"></i>
                                 </button>
-                            </div>
-                        </div>
-                        <div class="user-details-small">
-                            <div class="detail-row">
-                                <i class="fas fa-key"></i>
-                                <span class="detail-label">Token ID:</span>
-                                <span class="detail-value">${user.token}</span>
-                            </div>
-                            <div class="detail-row">
-                                <i class="fas fa-user"></i>
-                                <span class="detail-label">Username:</span>
-                                <span class="detail-value">${user.username}</span>
-                            </div>
-                            <div class="detail-row">
-                                <i class="fas fa-calendar-alt"></i>
-                                <span class="detail-label">Expiry:</span>
-                                <span class="detail-value">${user.expiryDate || 'No date'}</span>
                             </div>
                             <div class="detail-row">
                                 <i class="fas fa-clock"></i>
@@ -3570,7 +3517,15 @@
             if (!c.connected_at) return false;
 
             // ── 0. Admin force-offline: is_online=false AND heartbeat null → Offline ──
-            if (c.is_online === false && !c.last_heartbeat) return false;
+            // Protocol switch (SSH→SlowDNS/UDP/V2Ray/OVPN) ကာစ် last_heartbeat NULL ဖြစ်တက်သဎ်
+            // connected_at 5 မိနစ်အတြင်းဆိုရင်သာရင်သာ switching grace period → Online ယူဆမမဎ်
+            if (c.is_online === false && !c.last_heartbeat) {
+                if (c.connected_at) {
+                    const switchAge = Date.now() - new Date(c.connected_at).getTime();
+                    if (switchAge < 5 * 60 * 1000) return true; // 5 min grace for protocol switch
+                }
+                return false;
+            }
 
             // ── 1. Heartbeat check ─────────────────────────────────────────────
             // Android က 60s တစ်ကြိမ် heartbeat update လုပ်သည်
@@ -3580,8 +3535,9 @@
             if (c.last_heartbeat !== null && c.last_heartbeat !== undefined) {
                 const hbAge = Date.now() - new Date(c.last_heartbeat).getTime();
                 // App က 60s တစ်ကြိမ် heartbeat update လုပ်သည်
-                // 90s = 60s beat interval + 30s network/process tolerance
-                return hbAge < 90 * 1000;
+                // 180s = 60s beat interval + 120s protocol switching tolerance
+                // SSH→SlowDNS/UDP/V2Ray/OVPN switch ကာစ heartbeat gap ကျော်အောင် 3min ပေး
+                return hbAge < 180 * 1000;
             }
 
             // ── 2. Fallback: disconnected_at vs connected_at (heartbeat မပါ ဟောင်း row) ──
@@ -4169,7 +4125,41 @@
             if (!confirm(`"${tokenId}" ၏ GB Usage ကို 0 သို့ Reset မလုပ်မချင်း OK နှိပ်ပါ`)) return;
 
             showNotification("⏳ GB Resetting...", "info");
-            // safePatch / safeUpsert — global scope မှ သုံးသည် (duplicate removed)
+
+            // ── helper: silent PATCH (ignores all HTTP errors) ──
+            async function safePatch(table, filter, body) {
+                try {
+                    const r = await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
+                        method: "PATCH",
+                        headers: {
+                            "apikey": SB_KEY,
+                            "Authorization": "Bearer " + SB_KEY,
+                            "Content-Type": "application/json",
+                            "Prefer": "return=minimal"
+                        },
+                        body: JSON.stringify(body)
+                    });
+                    return r.status; // 204 = ok, anything else = ignored
+                } catch(e) { return 0; }
+            }
+
+            // ── helper: silent POST/upsert ──
+            async function safeUpsert(table, body) {
+                try {
+                    const r = await fetch(`${SB_URL}/rest/v1/${table}`, {
+                        method: "POST",
+                        headers: {
+                            "apikey": SB_KEY,
+                            "Authorization": "Bearer " + SB_KEY,
+                            "Content-Type": "application/json",
+                            "Prefer": "resolution=merge-duplicates,return=minimal"
+                        },
+                        body: JSON.stringify(body)
+                    });
+                    return r.status;
+                } catch(e) { return 0; }
+            }
+
             const enc = encodeURIComponent(tokenId);
 
             // 1) server_connections  →  used_bytes = 0
@@ -4210,6 +4200,5 @@
         }
         window.resetGbUsage = resetGbUsage;
     </script>
-    </div><!-- /app-container -->
 </body>
 </html>
