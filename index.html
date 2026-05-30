@@ -2238,7 +2238,7 @@
         /* Column header row */
         .live-panel-col-header {
             display: grid;
-            grid-template-columns: 2fr 1.4fr 1.3fr 1.1fr 1.1fr 68px;
+            grid-template-columns: 2.2fr 1.5fr 1.1fr 1fr 1.3fr 68px;
             gap: 4px;
             padding: 6px 12px;
             background: #1e293b;
@@ -2264,7 +2264,7 @@
         /* Each row — single line */
         .live-panel-row {
             display: grid;
-            grid-template-columns: 2fr 1.4fr 1.3fr 1.1fr 1.1fr 68px;
+            grid-template-columns: 2.2fr 1.5fr 1.1fr 1fr 1.3fr 68px;
             gap: 4px;
             align-items: center;
             padding: 9px 14px;
@@ -3714,7 +3714,7 @@
                                 c.protocol_type==='SSH'?'#60a5fa':c.protocol_type==='SSL'?'#a78bfa':
                                 c.protocol_type==='V2Ray'?'#34d399':c.protocol_type==='UDP'?'#f59e0b':
                                 c.protocol_type==='OVPN'?'#fb923c':c.protocol_type==='SlowDNS'?'#e879f9':'#94a3b8'
-                            };border-radius:4px;padding:2px 6px;">${c.protocol_type}</span>` : ''}
+                            };border-radius:4px;padding:2px 6px;">${c.protocol_type==='SlowDNS'?'SDNS':(c.protocol_type==='Unknown'||c.protocol_type==='unknown'?'N/A':c.protocol_type)}</span>` : ''}
                         </div>
                         <div class="live-conn-detail">
                             <i class="fas fa-clock"></i><span>${fmtTime(c.connected_at)}</span>
@@ -4106,12 +4106,18 @@
                     </div>` : '';
 
                 const proto      = c.protocol_type || '—';
-                const protoLabel = proto === '—' ? 'N/A' :
-                                   proto === 'SlowDNS' ? 'SDNS' : proto;
-                const protoColor = proto === 'SSH' ? '#60a5fa' : proto === 'SSL' ? '#a78bfa' :
-                                   proto === 'V2Ray' ? '#34d399' : proto === 'UDP' ? '#f59e0b' :
-                                   proto === 'OVPN' ? '#fb923c' : proto === 'SlowDNS' ? '#e879f9' :
-                                   proto === '—' ? '#475569' : '#94a3b8';
+                const protoLabel = proto === '—'       ? 'N/A'   :
+                                   proto === 'SlowDNS' ? 'SDNS'  :
+                                   proto === 'Unknown' ? 'N/A'   :
+                                   proto === 'unknown' ? 'N/A'   : proto;
+                const protoColor = proto === 'SSH'     ? '#60a5fa' :
+                                   proto === 'SSL'     ? '#a78bfa' :
+                                   proto === 'V2Ray'   ? '#34d399' :
+                                   proto === 'UDP'     ? '#f59e0b' :
+                                   proto === 'OVPN'    ? '#fb923c' :
+                                   proto === 'SlowDNS' ? '#e879f9' :
+                                   (proto === '—' || proto === 'Unknown' || proto === 'unknown')
+                                                       ? '#475569' : '#94a3b8';
                 const connTime  = c.connected_at ? fmtTime(c.connected_at) : '—';
 
                 return `
@@ -4122,8 +4128,8 @@
                     <div class="live-panel-cell" style="font-size:10px;font-weight:700;color:${gbColor};" title="${gbStr}">
                         ${gbStr}${gbBarHtml}
                     </div>
-                    <div style="text-align:center;overflow:visible;">
-                        <span style="font-size:9px;font-weight:800;background:${protoColor}28;color:${protoColor};border-radius:4px;padding:2px 5px;white-space:nowrap;border:1px solid ${protoColor}44;letter-spacing:.3px;">${protoLabel}</span>
+                    <div style="text-align:center;overflow:visible;min-width:0;">
+                        <span style="display:inline-block;font-size:9px;font-weight:800;background:${protoColor}28;color:${protoColor};border-radius:4px;padding:2px 5px;white-space:nowrap;border:1px solid ${protoColor}44;">${protoLabel}</span>
                     </div>
                     <div class="live-panel-status">
                         <div class="live-panel-status-dot ${cls}"></div>
